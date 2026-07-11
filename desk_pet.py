@@ -138,7 +138,7 @@ def set_terminal_raw(raw=True):
     if raw:
         if not _terminal_is_raw:
             _old_terminal_settings = termios.tcgetattr(fd)
-            tty.setraw(fd)
+            tty.setcbreak(fd)
             _terminal_is_raw = True
     else:
         if _terminal_is_raw and _old_terminal_settings is not None:
@@ -1446,6 +1446,155 @@ class DeskPet:
         # Gain XP on interaction
         self.gain_xp(20)
 
+    def execute_goofy_action(self, event):
+        def run():
+            if "order 66" in event:
+                self.hub.set_led("red")
+                for _ in range(4):
+                    try:
+                        self.hub.set_motor(90)
+                        self.hub.beep(200, 100)
+                        time.sleep(0.1)
+                        self.hub.set_motor(-90)
+                        time.sleep(0.1)
+                    except Exception:
+                        pass
+                try:
+                    self.hub.stop_motor()
+                except Exception:
+                    pass
+            elif "divide by zero" in event:
+                try:
+                    self.hub.set_led("orange")
+                    self.hub.beep(300, 150)
+                    self.hub.set_motor(50)
+                    time.sleep(0.1)
+                    self.hub.set_motor(-50)
+                    time.sleep(0.1)
+                    self.hub.stop_motor()
+                    self.hub.set_led("off")
+                    self.hub.beep(150, 200)
+                except Exception:
+                    pass
+            elif "vacuum cleaner" in event:
+                try:
+                    self.hub.set_led("purple")
+                    self.hub.beep(1000, 300)
+                    self.hub.set_motor(100)
+                    time.sleep(0.6)
+                    self.hub.stop_motor()
+                except Exception:
+                    pass
+            elif "poetry" in event:
+                try:
+                    self.hub.set_led("green")
+                    self.hub.set_motor(30)
+                    self.hub.beep(523, 150)
+                    time.sleep(0.15)
+                    self.hub.set_led("cyan")
+                    self.hub.set_motor(-30)
+                    self.hub.beep(659, 150)
+                    time.sleep(0.15)
+                    self.hub.set_led("blue")
+                    self.hub.beep(784, 150)
+                    self.hub.stop_motor()
+                except Exception:
+                    pass
+            elif "mothership" in event:
+                try:
+                    self.hub.set_led("blue")
+                    self.hub.set_motor(20)
+                    for f in [600, 700, 600, 700]:
+                        self.hub.beep(f, 80)
+                        time.sleep(0.1)
+                    self.hub.stop_motor()
+                except Exception:
+                    pass
+            elif "byte of RAM" in event:
+                try:
+                    self.hub.set_led("yellow")
+                    for _ in range(3):
+                        self.hub.set_motor(40)
+                        self.hub.beep(1200, 60)
+                        time.sleep(0.08)
+                        self.hub.set_motor(-40)
+                        time.sleep(0.08)
+                    self.hub.stop_motor()
+                except Exception:
+                    pass
+            elif "mainframes" in event:
+                try:
+                    self.hub.set_led("blue")
+                    self.hub.beep(800, 100)
+                    time.sleep(0.05)
+                    self.hub.beep(600, 100)
+                    time.sleep(0.05)
+                    self.hub.beep(400, 200)
+                except Exception:
+                    pass
+                self.mood = "sleeping"
+            elif "backflip" in event:
+                try:
+                    self.hub.set_led("red")
+                    self.hub.set_motor(100)
+                    self.hub.beep(500, 80)
+                    time.sleep(0.2)
+                    self.hub.set_motor(-100)
+                    self.hub.beep(300, 80)
+                    time.sleep(0.2)
+                    self.hub.stop_motor()
+                    self.hub.set_led("yellow")
+                    self.hub.beep(200, 300)
+                except Exception:
+                    pass
+            elif "microwave" in event:
+                try:
+                    self.hub.set_led("white")
+                    self.hub.beep(2000, 800)
+                except Exception:
+                    pass
+            elif "meaning of life" in event:
+                try:
+                    for color in ["red", "orange", "yellow", "green", "cyan", "blue", "purple"]:
+                        self.hub.set_led(color)
+                        self.hub.beep(880, 50)
+                        time.sleep(0.06)
+                    self.hub.set_motor(60)
+                    time.sleep(0.2)
+                    self.hub.stop_motor()
+                except Exception:
+                    pass
+            elif "JSON file" in event:
+                try:
+                    self.hub.set_led("purple")
+                    for _ in range(4):
+                        self.hub.set_motor(80)
+                        self.hub.beep(1500, 50)
+                        time.sleep(0.06)
+                        self.hub.set_motor(-80)
+                        time.sleep(0.06)
+                    self.hub.stop_motor()
+                except Exception:
+                    pass
+            elif "10,000 AAA" in event:
+                try:
+                    self.hub.set_led("red")
+                    self.hub.beep(300, 200)
+                    time.sleep(0.1)
+                    self.hub.beep(200, 300)
+                    self.hub.set_motor(-30)
+                    time.sleep(0.3)
+                    self.hub.stop_motor()
+                except Exception:
+                    pass
+
+            try:
+                self.hub.set_led("blue" if self.mood == "sleeping" else "green")
+            except Exception:
+                pass
+            
+        threading.Thread(target=run, daemon=True).start()
+
     def interact_poke(self):
         self.mood = "angry"
         self.happiness = max(0, self.happiness - 20)
@@ -1807,7 +1956,7 @@ class DeskPet:
                         ]
                         event = random.choice(goofy_events)
                         self.add_log(f"{self.pet_name} wanted to: {event}")
-                        self.hub.beep(random.choice([440, 550, 660, 880]), 60)
+                        self.execute_goofy_action(event)
                     
                 # Hunger warnings & screaming challenge trigger
                 if self.hunger > 80 and not self.screaming_for_food and not self.music_playing:
@@ -2568,6 +2717,7 @@ def select_hub_flow(default_hub_name):
 def handle_games_menu(pet):
     while True:
         dist_p = pet.hub.check_connected("Distance Sensor")
+        tilt_p = pet.hub.check_connected("Tilt Sensor")
         motor_p = pet.hub.check_connected("Motor")
         
         options = []
@@ -2577,13 +2727,52 @@ def handle_games_menu(pet):
         mapping[len(options) - 1] = "tutorial"
         
         if dist_p and motor_p:
-            options.append("Obstacle Course (Stop-Before-Crash) - Autonomous car navigation")
-            mapping[len(options) - 1] = "obstacle"
+            options.append("🙈 Hide & Seek - Match proximity target distance")
+            mapping[len(options) - 1] = "hide_seek"
             
-        options.append("Color Simon Says - Memorize LED color patterns")
-        mapping[len(options) - 1] = "simon"
+        if dist_p and motor_p:
+            options.append("⏱️ Speed Petting Sprint - Proximity speed wave test")
+            mapping[len(options) - 1] = "speed_pet"
+            
+        if motor_p:
+            options.append("🥁 Tail-Wag Rhythm Matcher - Copy tail beats")
+            mapping[len(options) - 1] = "rhythm"
+            
+        if tilt_p and motor_p:
+            options.append("⚖️ Balance the Tail - Keep tail centered by tilting")
+            mapping[len(options) - 1] = "balance"
+            
+        options.append("🎵 Sound Pitch Memory - Match musical note order")
+        mapping[len(options) - 1] = "sound_mem"
         
-        options.append("Back to Main Menu")
+        if dist_p and tilt_p:
+            options.append("🔐 Pet Code Breaker - Guess the 3-action combination")
+            mapping[len(options) - 1] = "code_break"
+            
+        if dist_p and motor_p:
+            options.append("⚡ Tail Snatcher - React instantly when tail stops")
+            mapping[len(options) - 1] = "snatcher"
+            
+        if dist_p:
+            options.append("🎧 Sound DJ - Control beeps with hand distance")
+            mapping[len(options) - 1] = "dj"
+            
+        if tilt_p and motor_p:
+            options.append("🌀 Tilt Maze Navigator - Steering virtual ball to exit")
+            mapping[len(options) - 1] = "maze"
+            
+        if dist_p and motor_p:
+            options.append("🛡️ Keep-Away - Hold hand at safe range from sweeping tail")
+            mapping[len(options) - 1] = "keep_away"
+            
+        if tilt_p:
+            options.append("📐 Simon Says: Tilt - Copy physical tilt directions")
+            mapping[len(options) - 1] = "simon_tilt"
+            
+        options.append("🔴 Color Simon Says - Memorize LED color patterns")
+        mapping[len(options) - 1] = "simon_color"
+        
+        options.append("Back to Dashboard")
         mapping[len(options) - 1] = "back"
         
         sel = choose_option_interactive("Pet Arcade & Games Menu", options)
@@ -2595,9 +2784,29 @@ def handle_games_menu(pet):
             break
         elif action == "tutorial":
             run_interactive_tutorial(pet)
-        elif action == "obstacle":
-            run_obstacle_course_game(pet)
-        elif action == "simon":
+        elif action == "hide_seek":
+            run_hide_and_seek_game(pet)
+        elif action == "speed_pet":
+            run_speed_petting_game(pet)
+        elif action == "rhythm":
+            run_rhythm_matcher_game(pet)
+        elif action == "balance":
+            run_balance_tail_game(pet)
+        elif action == "sound_mem":
+            run_sound_memory_game(pet)
+        elif action == "code_break":
+            run_code_breaker_game(pet)
+        elif action == "snatcher":
+            run_tail_snatcher_game(pet)
+        elif action == "dj":
+            run_sound_dj_game(pet)
+        elif action == "maze":
+            run_tilt_maze_game(pet)
+        elif action == "keep_away":
+            run_keep_away_game(pet)
+        elif action == "simon_tilt":
+            run_simon_says_tilt_game(pet)
+        elif action == "simon_color":
             run_simon_says_game(pet)
 
 
@@ -2719,74 +2928,951 @@ def run_interactive_tutorial(pet):
         return
 
 
-def run_obstacle_course_game(pet):
+def run_hide_and_seek_game(pet):
     console.clear()
-    console.print("=== 🚗 Obstacle Course Avoidance Game ===\n", style="bold cyan")
-    console.print("Instructions: Position your WeDo robot car on a clear path on your desk.")
-    console.print("We will run the motor forward at speed 45.")
-    console.print("As soon as the distance sensor detects an obstacle (< 5cm), the robot will brake, beep,")
-    console.print("and reverse at speed -50 for 1.2 seconds to avoid crashing!")
-    console.print("Press Ctrl+C or type 'exit' during the game to abort.")
-    console.input("\nPress Enter to start driving...")
+    console.print("=== 🙈 WeDo Hide & Seek (Proximity Hot & Cold) 🙈 ===\n", style="bold cyan")
+    console.print("Instructions: Kepler will think of a secret target distance (between 2 and 8 cm).")
+    console.print("Move your hand closer or further from the Distance Sensor to find the spot.")
+    console.print("Kepler's LED and beep pitch will tell you if you are Hot or Cold:")
+    console.print("  🔴 Red / Low Pitch  = Cold (Far from target)")
+    console.print("  🟡 Yellow / Medium  = Warm (Getting closer)")
+    console.print("  🟢 Green / High     = Hot! (Very close / On Target!)")
+    console.print("Hold your hand steady on the target for 2 seconds to win the round!")
+    console.input("\nPress Enter to start Round 1...")
     
-    score = 0
-    driving = True
+    rounds_to_win = 3
+    round_num = 1
+    total_xp = 0
+    
     try:
-        while driving:
-            console.print(f"[green]Driving forward... Score (Avoided obstacles): {score}[/green]")
-            try:
-                pet.hub.set_motor(45)
-            except Exception:
-                pass
-                
-            obstacle_avoided = False
-            start_check = time.time()
-            while time.time() - start_check < 6.0:
+        while round_num <= rounds_to_win:
+            import random
+            target = random.randint(2, 8)
+            console.print(f"\n[bold yellow]Round {round_num} of {rounds_to_win}: Kepler is hiding a secret distance...[/bold yellow]")
+            time.sleep(1.0)
+            
+            consecutive_matches = 0
+            while consecutive_matches < 4:
                 dist = 10
                 dist_p = pet.hub.check_connected("Distance Sensor")
                 if dist_p:
                     dist = pet.hub.sensor_cache[dist_p]["distance"]
-                if dist <= 5:
-                    obstacle_avoided = True
-                    break
-                time.sleep(0.1)
+                else:
+                    console.print("[red]Error: Distance Sensor disconnected![/red]")
+                    time.sleep(1.0)
+                    continue
                 
-            if obstacle_avoided:
-                console.print(f"[yellow]⚠️ Obstacle detected at {dist}cm! Braking and reversing![/yellow]")
-                try:
-                    pet.hub.stop_motor()
-                    pet.hub.beep(1000, 100)
-                    time.sleep(0.05)
-                    pet.hub.beep(1200, 150)
-                    pet.hub.set_motor(-50)
-                    time.sleep(1.2)
-                    pet.hub.stop_motor()
-                except Exception:
-                    pass
-                score += 1
-                pet.gain_xp(15)
-                
-                cont = console.input("\nAvoided! Continue driving? (y/n): ").strip().lower()
-                if cont == "n":
-                    driving = False
-            else:
-                console.print("[yellow]Clear path! No obstacles detected for 6 seconds. Pausing...[/yellow]")
-                try:
-                    pet.hub.stop_motor()
-                except Exception:
-                    pass
-                cont = console.input("Continue driving? (y/n): ").strip().lower()
-                if cont == "n":
-                    driving = False
+                if dist >= 10:
+                    console.print("🙈 Move your hand in range (under 10 cm)...", end="\r")
+                    try:
+                        pet.hub.set_led("off")
+                    except Exception:
+                        pass
+                    consecutive_matches = 0
+                    time.sleep(0.5)
+                else:
+                    diff = abs(dist - target)
+                    if diff == 0:
+                        consecutive_matches += 1
+                        console.print(f"🟢 [bold green]ON TARGET! ({dist}cm) Hold it! {2.0 - consecutive_matches * 0.5:.1f}s remaining...[/bold green]     ", end="\r")
+                        try:
+                            pet.hub.set_led("green")
+                            pet.hub.beep(1200, 100)
+                            pet.hub.set_motor(30 if consecutive_matches % 2 == 0 else -30)
+                        except Exception:
+                            pass
+                        time.sleep(0.5)
+                    else:
+                        consecutive_matches = 0
+                        try:
+                            if diff <= 1:
+                                console.print(f"🟡 Warm! ({dist}cm) Keep adjusting...", end="\r")
+                                pet.hub.set_led("yellow")
+                                pet.hub.beep(800, 100)
+                                time.sleep(0.4)
+                            elif diff == 2:
+                                console.print(f"🟡 Lukewarm ({dist}cm)...", end="\r")
+                                pet.hub.set_led("orange")
+                                pet.hub.beep(500, 100)
+                                time.sleep(0.6)
+                            else:
+                                console.print(f"🔴 Cold ({dist}cm)...", end="\r")
+                                pet.hub.set_led("red")
+                                pet.hub.beep(300, 100)
+                                time.sleep(0.8)
+                        except Exception:
+                            time.sleep(0.5)
+            
+            try:
+                pet.hub.stop_motor()
+            except Exception:
+                pass
+            console.print(f"\n[bold green]🎉 Round {round_num} Complete! Target was {target} cm![/bold green]")
+            try:
+                pet.hub.set_led("green")
+                for _ in range(3):
+                    pet.hub.set_motor(60)
+                    pet.hub.beep(880, 80)
+                    time.sleep(0.1)
+                    pet.hub.set_motor(-60)
+                    pet.hub.beep(1047, 80)
+                    time.sleep(0.1)
+                pet.hub.stop_motor()
+            except Exception:
+                pass
+            
+            pet.gain_xp(30)
+            total_xp += 30
+            round_num += 1
+            if round_num <= rounds_to_win:
+                console.input("\nPress Enter to begin the next round...")
+        console.print(f"\n[bold green]🏆 Congratulations! You won the game! Total XP gained: {total_xp} XP! 🏆[/bold green]")
     except KeyboardInterrupt:
         pass
     finally:
         try:
             pet.hub.stop_motor()
+            pet.hub.set_led("green")
         except Exception:
             pass
-    console.print(f"\n[green]Game Over! Total obstacles avoided: {score}. Total XP gained: {score * 15}![/green]")
     console.input("\nPress Enter to return to games menu...")
+
+
+def run_speed_petting_game(pet):
+    console.clear()
+    console.print("=== ⏱️ Speed Petting Sprint ⏱️ ===\n", style="bold cyan")
+    console.print("Instructions: Wave your hand rapidly back and forth under the Distance Sensor (< 6cm).")
+    console.print("You have exactly 10 seconds to get as many 'pets' as possible!")
+    console.input("\nPress Enter to start the countdown...")
+    
+    for i in [3, 2, 1]:
+        console.print(f"[yellow]{i}...[/yellow]")
+        try:
+            pet.hub.beep(600, 150)
+        except Exception:
+            pass
+        time.sleep(0.8)
+    console.print("[bold green]GO GO GO!!![/bold green]")
+    try:
+        pet.hub.beep(1000, 400)
+    except Exception:
+        pass
+    
+    score = 0
+    start_t = time.time()
+    last_petted = False
+    
+    try:
+        while time.time() - start_t < 10.0:
+            elapsed = time.time() - start_t
+            dist = 10
+            dist_p = pet.hub.check_connected("Distance Sensor")
+            if dist_p:
+                dist = pet.hub.sensor_cache[dist_p]["distance"]
+            
+            petted = (dist < 6)
+            if petted and not last_petted:
+                score += 1
+                try:
+                    pet.hub.beep(800, 50)
+                    pet.hub.set_led("purple")
+                    pet.hub.set_motor(40 if score % 2 == 0 else -40)
+                except Exception:
+                    pass
+            elif not petted:
+                try:
+                    pet.hub.set_led("green")
+                    pet.hub.stop_motor()
+                except Exception:
+                    pass
+                
+            last_petted = petted
+            console.print(f"Time: {10.0 - elapsed:.1f}s | Pets: [bold cyan]{score}[/bold cyan]     ", end="\r")
+            time.sleep(0.05)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.stop_motor()
+            pet.hub.set_led("green")
+        except Exception:
+            pass
+        
+    rank = "Bronze" if score < 15 else "Silver" if score < 25 else "Gold" if score < 35 else "Platinum 🏆"
+    xp = score * 2
+    pet.gain_xp(xp)
+    console.print(f"\n\n[bold green]Finished! Total Pets: {score} | Rank: {rank} | XP Gained: {xp} XP![/bold green]")
+    console.input("\nPress Enter to return to games menu...")
+
+
+def run_rhythm_matcher_game(pet):
+    console.clear()
+    console.print("=== 🥁 Tail-Wag Rhythm Matcher 🥁 ===\n", style="bold cyan")
+    console.print("Instructions: Kepler will wag its tail and beep in a rhythm.")
+    console.print("You must tap the [bold green]Enter[/bold green] key to match that exact rhythm!")
+    console.input("\nPress Enter to start Round 1...")
+    
+    rounds = 3
+    round_num = 1
+    xp_won = 0
+    
+    try:
+        while round_num <= rounds:
+            import random
+            patterns = [
+                [0.4, 0.4, 0.8],
+                [0.2, 0.2, 0.6, 0.6],
+                [0.5, 0.5, 0.2, 0.2, 0.5]
+            ]
+            pattern = random.choice(patterns)
+            
+            console.print(f"\n[bold yellow]Round {round_num}: Listen and watch Kepler's rhythm...[/bold yellow]")
+            time.sleep(1.0)
+            
+            timestamps = []
+            curr = 0.0
+            for delay in pattern:
+                time.sleep(delay)
+                try:
+                    pet.hub.set_led("orange")
+                    pet.hub.set_motor(50)
+                    pet.hub.beep(600, 100)
+                except Exception:
+                    pass
+                curr += delay
+                timestamps.append(curr)
+                time.sleep(0.05)
+                try:
+                    pet.hub.stop_motor()
+                    pet.hub.set_led("green")
+                except Exception:
+                    pass
+                
+            console.print("\n[bold cyan]YOUR TURN! Press Enter to match the beats![/bold cyan]")
+            user_inputs = []
+            start_t = time.time()
+            
+            for i in range(len(pattern)):
+                console.input(f"Tap beat {i+1}/{len(pattern)}... ")
+                user_inputs.append(time.time() - start_t)
+                try:
+                    pet.hub.beep(800, 80)
+                except Exception:
+                    pass
+            
+            user_timestamps = []
+            if len(user_inputs) > 0:
+                offset = user_inputs[0]
+                user_timestamps = [t - offset for t in user_inputs]
+                ref_offset = timestamps[0]
+                ref_timestamps = [t - ref_offset for t in timestamps]
+                
+                diffs = []
+                for u_t, r_t in zip(user_timestamps, ref_timestamps):
+                    diffs.append(abs(u_t - r_t))
+                avg_diff = sum(diffs) / len(diffs) if len(diffs) > 0 else 1.0
+                
+                accuracy = max(0, int((1.0 - avg_diff) * 100))
+                console.print(f"[bold]Beat Match Accuracy: {accuracy}%[/bold]")
+                
+                if accuracy >= 70:
+                    console.print("[green]Awesome! You matched the rhythm! Kepler is dancing![/green]")
+                    try:
+                        pet.hub.set_led("green")
+                        for _ in range(2):
+                            pet.hub.set_motor(70)
+                            time.sleep(0.15)
+                            pet.hub.set_motor(-70)
+                            time.sleep(0.15)
+                        pet.hub.stop_motor()
+                    except Exception:
+                        pass
+                    pet.gain_xp(35)
+                    xp_won += 35
+                else:
+                    console.print("[red]Rhythm mismatched. Practice makes perfect![/red]")
+                    try:
+                        pet.hub.beep(300, 300)
+                    except Exception:
+                        pass
+            
+            round_num += 1
+            if round_num <= rounds:
+                console.input("\nPress Enter to begin the next round...")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.stop_motor()
+            pet.hub.set_led("green")
+        except Exception:
+            pass
+        
+    console.print(f"\n[green]Game Over! Total XP gained: {xp_won} XP![/green]")
+    console.input("\nPress Enter to return to games menu...")
+
+
+def run_balance_tail_game(pet):
+    console.clear()
+    console.print("=== ⚖️ Balance the Tail (Tilt Control) ⚖️ ===\n", style="bold cyan")
+    console.print("Instructions: Kepler's tail will drift left or right.")
+    console.print("Tilt the Smart Hub (Tilt Sensor) in the [bold yellow]opposite[/bold yellow] direction to balance it!")
+    console.print("Keep the tail balanced in the center zone for 15 seconds to win!")
+    console.input("\nPress Enter to start balancing...")
+    
+    score = 0
+    start_t = time.time()
+    balance_zone = 0.0
+    
+    try:
+        while time.time() - start_t < 15.0:
+            elapsed = time.time() - start_t
+            
+            tilt_p = pet.hub.check_connected("Tilt Sensor")
+            tilt_val = pet.hub.sensor_cache[tilt_p]["tilt"] if tilt_p else "Neutral"
+            
+            import random
+            balance_zone += random.choice([-0.8, -0.4, 0.4, 0.8])
+            
+            if tilt_val == "Left":
+                balance_zone -= 1.2
+            elif tilt_val == "Right":
+                balance_zone += 1.2
+                
+            balance_zone = min(6.0, max(-6.0, balance_zone))
+            
+            pos = int(balance_zone + 6)
+            gauge = ["─"] * 13
+            gauge[6] = "|"
+            gauge[pos] = "❌"
+            gauge_str = "".join(gauge)
+            
+            status = ""
+            if abs(balance_zone) <= 2.5:
+                status = "[green]Balanced![/green]"
+                score += 1
+                try:
+                    pet.hub.set_led("green")
+                    pet.hub.set_motor(20 if pos % 2 == 0 else -20)
+                except Exception:
+                    pass
+            else:
+                status = "[red]Out of Balance! TILT THE OTHER WAY![/red]"
+                try:
+                    pet.hub.set_led("red")
+                    pet.hub.beep(400, 80)
+                    pet.hub.set_motor(80 if balance_zone > 0 else -80)
+                except Exception:
+                    pass
+                
+            console.print(f"Time: {15.0 - elapsed:.1f}s | Position: [{gauge_str}] | {status}      ", end="\r")
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.stop_motor()
+            pet.hub.set_led("green")
+        except Exception:
+            pass
+        
+    success = (score >= 45)
+    if success:
+        console.print("\n\n[bold green]🎉 Great job! The tail stayed perfectly balanced! Kepler is happy![/bold green]")
+        pet.gain_xp(40)
+    else:
+        console.print("\n\n[red]Oops! The tail drifted too far. Try again to balance it![/red]")
+        try:
+            pet.hub.beep(250, 400)
+        except Exception:
+            pass
+    console.input("\nPress Enter to return to games menu...")
+
+
+def run_sound_memory_game(pet):
+    console.clear()
+    console.print("=== 🎵 Sound Pitch Memory Matcher 🎵 ===\n", style="bold cyan")
+    console.print("Instructions: Kepler will play a sequence of different musical beeps.")
+    console.print("Listen carefully to the pitches (1 = Low, 2 = Medium, 3 = High).")
+    console.print("You must select the correct sequence from the choices presented!")
+    console.input("\nPress Enter to start Round 1...")
+    
+    rounds = 3
+    round_num = 1
+    xp_gained = 0
+    pitches = {
+        "1": (400, "Low"),
+        "2": (600, "Medium"),
+        "3": (800, "High")
+    }
+    
+    try:
+        while round_num <= rounds:
+            import random
+            seq = [random.choice(["1", "2", "3"]) for _ in range(round_num + 2)]
+            
+            console.print(f"\n[bold yellow]Round {round_num}: Listen to the note pitches...[/bold yellow]")
+            time.sleep(1.0)
+            
+            for note in seq:
+                freq, label = pitches[note]
+                try:
+                    pet.hub.set_led("orange")
+                    pet.hub.beep(freq, 350)
+                except Exception:
+                    pass
+                time.sleep(0.4)
+                try:
+                    pet.hub.set_led("green")
+                except Exception:
+                    pass
+                
+            correct_ans = "".join(seq)
+            choices = [correct_ans]
+            while len(choices) < 3:
+                alt = "".join([random.choice(["1", "2", "3"]) for _ in range(round_num + 2)])
+                if alt not in choices:
+                    choices.append(alt)
+            random.shuffle(choices)
+            
+            menu_opts = [f"Sequence: {' - '.join(list(c))}" for c in choices]
+            sel = choose_option_interactive(f"Round {round_num}: Choose the correct sequence", menu_opts)
+            if sel == -1:
+                break
+                
+            chosen = choices[sel]
+            if chosen == correct_ans:
+                console.print("[green]Correct! Your ears are sharp![/green]")
+                try:
+                    pet.hub.beep(1200, 150)
+                except Exception:
+                    pass
+                pet.gain_xp(30)
+                xp_gained += 30
+            else:
+                console.print(f"[red]Wrong! The correct sequence was: {' - '.join(list(correct_ans))}[/red]")
+                try:
+                    pet.hub.beep(250, 450)
+                except Exception:
+                    pass
+                
+            round_num += 1
+            if round_num <= rounds:
+                console.input("\nPress Enter to begin the next round...")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.set_led("green")
+        except Exception:
+            pass
+        
+    console.print(f"\n[green]Game Over! Total XP gained: {xp_gained} XP![/green]")
+    console.input("\nPress Enter to return to games menu...")
+
+
+def run_code_breaker_game(pet):
+    console.clear()
+    console.print("=== 🔐 Pet Code Breaker (Pattern Lock) 🔐 ===\n", style="bold cyan")
+    console.print("Instructions: Kepler has locked his treat box with a secret 3-input code.")
+    console.print("The code consists of 3 actions in sequence. Actions are:")
+    console.print("  P = Wave Hand (< 6cm) | L = Tilt Hub Left | R = Tilt Hub Right")
+    console.print("Kepler will flash [bold yellow]Yellow[/bold yellow] for correct parts, and [bold red]Red[/bold red] if any part is wrong.")
+    console.print("Passcode deducing limit: 5 attempts total!")
+    console.input("\nPress Enter to begin cracking...")
+    
+    import random
+    passcode = [random.choice(["P", "L", "R"]) for _ in range(3)]
+    attempts = 5
+    solved = False
+    
+    try:
+        for attempt in range(1, attempts + 1):
+            console.print(f"\n[bold yellow]Attempt {attempt} of {attempts}[/bold yellow]")
+            
+            user_code = []
+            for step in range(3):
+                console.print(f"Perform Action {step+1}/3 (Hold position until beep)...")
+                action = None
+                while action is None:
+                    dist_p = pet.hub.check_connected("Distance Sensor")
+                    tilt_p = pet.hub.check_connected("Tilt Sensor")
+                    
+                    dist = pet.hub.sensor_cache[dist_p]["distance"] if dist_p else 10
+                    tilt = pet.hub.sensor_cache[tilt_p]["tilt"] if tilt_p else "Neutral"
+                    
+                    if dist < 6:
+                        action = "P"
+                    elif tilt == "Left":
+                        action = "L"
+                    elif tilt == "Right":
+                        action = "R"
+                    time.sleep(0.1)
+                    
+                user_code.append(action)
+                console.print(f"Recorded action: [bold cyan]{action}[/bold cyan]")
+                try:
+                    pet.hub.beep(800, 100)
+                except Exception:
+                    pass
+                time.sleep(0.8)
+                
+            correct_count = 0
+            for u, p in zip(user_code, passcode):
+                if u == p:
+                    correct_count += 1
+            
+            if correct_count == 3:
+                solved = True
+                break
+            else:
+                console.print(f"[red]Access Denied! Match count: {correct_count}/3 correct.[/red]")
+                try:
+                    pet.hub.set_led("red")
+                    pet.hub.beep(300, 300)
+                except Exception:
+                    pass
+                time.sleep(0.5)
+                try:
+                    pet.hub.set_led("green")
+                except Exception:
+                    pass
+                
+        if solved:
+            console.print("\n[bold green]🔑 Code Cracked! Access Granted! Treat box unlocked! Kepler wags his tail! 🔑[/bold green]")
+            try:
+                pet.hub.set_led("green")
+                for _ in range(4):
+                    pet.hub.set_motor(60)
+                    pet.hub.beep(1000, 100)
+                    time.sleep(0.1)
+                    pet.hub.set_motor(-60)
+                    time.sleep(0.1)
+                pet.hub.stop_motor()
+            except Exception:
+                pass
+            pet.gain_xp(50)
+        else:
+            console.print(f"\n[red]Locked out! The correct passcode was: {' - '.join(passcode)}[/red]")
+            try:
+                pet.hub.beep(200, 600)
+            except Exception:
+                pass
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.stop_motor()
+            pet.hub.set_led("green")
+        except Exception:
+            pass
+    console.input("\nPress Enter to return to games menu...")
+
+
+def run_tail_snatcher_game(pet):
+    console.clear()
+    console.print("=== ⚡ Reaction Time Test: Tail Snatcher ⚡ ===\n", style="bold cyan")
+    console.print("Instructions: Kepler's tail will wag back and forth.")
+    console.print("Watch carefully! As soon as the tail stops and flashes [bold purple]Purple[/bold purple],")
+    console.print("place your hand rapidly in front of the Distance Sensor (< 6cm)!")
+    console.input("\nPress Enter to begin...")
+    
+    rounds = 3
+    round_num = 1
+    times = []
+    
+    try:
+        while round_num <= rounds:
+            console.print(f"\n[yellow]Round {round_num}: Tail is wagging... Stay ready...[/yellow]")
+            time.sleep(1.0)
+            
+            import random
+            wag_duration = random.uniform(2.0, 5.0)
+            start_wag = time.time()
+            while time.time() - start_wag < wag_duration:
+                try:
+                    pet.hub.set_motor(40 if int(time.time()*5)%2==0 else -40)
+                    pet.hub.set_led("orange")
+                except Exception:
+                    pass
+                time.sleep(0.1)
+                
+            try:
+                pet.hub.stop_motor()
+                pet.hub.set_led("purple")
+                pet.hub.beep(1200, 100)
+            except Exception:
+                pass
+            signal_t = time.time()
+            
+            reacted = False
+            react_time = 9.99
+            while time.time() - signal_t < 4.0:
+                dist = 10
+                dist_p = pet.hub.check_connected("Distance Sensor")
+                if dist_p:
+                    dist = pet.hub.sensor_cache[dist_p]["distance"]
+                if dist < 6:
+                    react_time = time.time() - signal_t
+                    reacted = True
+                    break
+                time.sleep(0.01)
+                
+            if reacted:
+                console.print(f"[green]Caught! Reaction time: {react_time*1000:.0f} ms![/green]")
+                times.append(react_time)
+                try:
+                    pet.hub.beep(1000, 100)
+                except Exception:
+                    pass
+            else:
+                console.print("[red]Too slow! Tail got away![/red]")
+                try:
+                    pet.hub.beep(250, 400)
+                except Exception:
+                    pass
+                
+            try:
+                pet.hub.set_led("green")
+            except Exception:
+                pass
+            round_num += 1
+            if round_num <= rounds:
+                console.input("\nPress Enter to begin the next round...")
+                
+        if len(times) > 0:
+            avg_time = sum(times) / len(times)
+            console.print(f"\n[bold green]🏆 Game Over! Average Reaction Time: {avg_time*1000:.0f} ms! 🏆[/bold green]")
+            xp = int(max(10, (1.0 - avg_time) * 100))
+            pet.gain_xp(xp)
+            console.print(f"[green]XP Gained: {xp} XP![/green]")
+        else:
+            console.print("\n[red]No successful catches! Practice and try again![/red]")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.stop_motor()
+            pet.hub.set_led("green")
+        except Exception:
+            pass
+    console.input("\nPress Enter to return to games menu...")
+
+
+def run_sound_dj_game(pet):
+    console.clear()
+    console.print("=== 🎧 Sound DJ: Interactive Theremin 🎧 ===\n", style="bold cyan")
+    console.print("Instructions: Kepler turns into a musical instrument!")
+    console.print("Move your hand closer or further from the Distance Sensor to control tone pitch.")
+    console.print("  Closer (< 3cm) = High Pitch note")
+    console.print("  Further (> 8cm) = Low Pitch note")
+    console.print("Play music by moving your hand! Press any key or Ctrl+C to exit.")
+    console.input("\nPress Enter to start playing...")
+    
+    start_t = time.time()
+    try:
+        while True:
+            if is_key_pressed():
+                read_key(0.01)
+                break
+                
+            dist = 10
+            dist_p = pet.hub.check_connected("Distance Sensor")
+            if dist_p:
+                dist = pet.hub.sensor_cache[dist_p]["distance"]
+                
+            if dist >= 10:
+                try:
+                    pet.hub.set_led("off")
+                except Exception:
+                    pass
+                time.sleep(0.1)
+            else:
+                freq = 1300 - (dist * 100)
+                freq = min(1300, max(300, freq))
+                
+                colors = ["red", "orange", "yellow", "green", "cyan", "blue", "purple"]
+                color = colors[min(len(colors)-1, int(dist * 0.7))]
+                
+                try:
+                    pet.hub.set_led(color)
+                    pet.hub.beep(int(freq), 120)
+                    pet.hub.set_motor(20 if int(time.time()*6)%2==0 else -20)
+                except Exception:
+                    pass
+                time.sleep(0.12)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.stop_motor()
+            pet.hub.set_led("green")
+        except Exception:
+            pass
+        
+    duration = time.time() - start_t
+    xp = min(50, int(duration * 2))
+    pet.gain_xp(xp)
+    console.print(f"\n[green]Thanks for DJing! You played for {duration:.1f}s. XP Gained: {xp} XP![/green]")
+    console.input("\nPress Enter to return to games menu...")
+
+
+def run_tilt_maze_game(pet):
+    console.clear()
+    console.print("=== 🌀 Tilt Maze Navigator 🌀 ===\n", style="bold cyan")
+    console.print("Instructions: Steer the ball (●) to the exit target (X) inside the grid.")
+    console.print("Tilt the Smart Hub (Tilt Sensor) to move in that direction:")
+    console.print("  ◀ Left / Right ▶ / ▲ Forward / Backward ▼")
+    console.input("\nPress Enter to enter the maze...")
+    
+    grid_size = 5
+    player_x, player_y = 0, 0
+    target_x, target_y = 4, 4
+    
+    moves = 0
+    start_t = time.time()
+    
+    try:
+        while (player_x != target_x or player_y != target_y):
+            grid = []
+            for y in range(grid_size):
+                row = []
+                for x in range(grid_size):
+                    if x == player_x and y == player_y:
+                        row.append("●")
+                    elif x == target_x and y == target_y:
+                        row.append("❌")
+                    else:
+                        row.append("·")
+                grid.append("  ".join(row))
+            
+            console.clear()
+            console.print("=== 🌀 Tilt Maze Navigator 🌀 ===", style="bold cyan")
+            console.print(f"Moves: {moves} | Time Elapsed: {time.time()-start_t:.1f}s\n")
+            for r in grid:
+                console.print(r, style="bold white")
+            console.print("\n[yellow]Tilt sensor active. Hold tilt to slide...[/yellow]")
+            
+            tilt_p = pet.hub.check_connected("Tilt Sensor")
+            tilt_val = pet.hub.sensor_cache[tilt_p]["tilt"] if tilt_p else "Neutral"
+            
+            moved = False
+            if tilt_val == "Left" and player_x > 0:
+                player_x -= 1
+                moved = True
+            elif tilt_val == "Right" and player_x < grid_size - 1:
+                player_x += 1
+                moved = True
+            elif tilt_val == "Forward" and player_y > 0:
+                player_y -= 1
+                moved = True
+            elif tilt_val == "Backward" and player_y < grid_size - 1:
+                player_y += 1
+                moved = True
+                
+            if moved:
+                moves += 1
+                try:
+                    pet.hub.beep(900, 80)
+                    pet.hub.set_led("cyan")
+                    pet.hub.set_motor(30)
+                    time.sleep(0.12)
+                    pet.hub.stop_motor()
+                    pet.hub.set_led("green")
+                except Exception:
+                    pass
+                time.sleep(0.4)
+            else:
+                time.sleep(0.1)
+                
+        elapsed = time.time() - start_t
+        console.clear()
+        console.print("[bold green]🏆 Exit Reached! Maze Solved! Kepler celebrates! 🏆[/bold green]")
+        try:
+            pet.hub.set_led("green")
+            for _ in range(3):
+                pet.hub.set_motor(60)
+                pet.hub.beep(880, 80)
+                time.sleep(0.08)
+                pet.hub.set_motor(-60)
+                pet.hub.beep(1047, 80)
+                time.sleep(0.08)
+            pet.hub.stop_motor()
+        except Exception:
+            pass
+        
+        xp = max(10, int(100 - elapsed - moves))
+        pet.gain_xp(xp)
+        console.print(f"[green]Moves: {moves} | Time: {elapsed:.1f}s | XP Gained: {xp} XP![/green]")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.stop_motor()
+            pet.hub.set_led("green")
+        except Exception:
+            pass
+    console.input("\nPress Enter to return to games menu...")
+
+
+def run_keep_away_game(pet):
+    console.clear()
+    console.print("=== 🛡️ Keep-Away (Avoidance Challenge) 🛡️ ===\n", style="bold cyan")
+    console.print("Instructions: Kepler will sweep its tail left and right.")
+    console.print("Keep your hand at a safe range of [bold green]8 cm[/bold green] from the Distance Sensor.")
+    console.print("If your hand gets too close (< 5cm) or too far, you lose points!")
+    console.print("Avoid Kepler's tail sweeps for 10 seconds!")
+    console.input("\nPress Enter to start...")
+    
+    score = 100
+    start_t = time.time()
+    
+    try:
+        while time.time() - start_t < 10.0:
+            elapsed = time.time() - start_t
+            
+            try:
+                motor_dir = 50 if int(elapsed * 4) % 2 == 0 else -50
+                pet.hub.set_motor(motor_dir)
+            except Exception:
+                pass
+            
+            dist = 10
+            dist_p = pet.hub.check_connected("Distance Sensor")
+            if dist_p:
+                dist = pet.hub.sensor_cache[dist_p]["distance"]
+                
+            status = ""
+            if dist >= 8:
+                status = "[green]Safe Range[/green]"
+                try:
+                    pet.hub.set_led("green")
+                except Exception:
+                    pass
+            elif dist <= 5:
+                status = "[red]Too Close! BACK AWAY![/red]"
+                score -= 3
+                try:
+                    pet.hub.set_led("red")
+                    pet.hub.beep(300, 60)
+                except Exception:
+                    pass
+            else:
+                status = "[yellow]Warning: Closing In![/yellow]"
+                score -= 1
+                try:
+                    pet.hub.set_led("yellow")
+                except Exception:
+                    pass
+                
+            console.print(f"Time: {10.0 - elapsed:.1f}s | Hand distance: {dist}cm | {status}      ", end="\r")
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.stop_motor()
+            pet.hub.set_led("green")
+        except Exception:
+            pass
+        
+    score = max(0, score)
+    xp = int(score / 2)
+    pet.gain_xp(xp)
+    console.print(f"\n\n[bold green]Game Complete! Your Score: {score}/100 | XP Gained: {xp} XP![/bold green]")
+    console.input("\nPress Enter to return to games menu...")
+
+
+def run_simon_says_tilt_game(pet):
+    console.clear()
+    console.print("=== 📐 Simon Says: Tilt Version 📐 ===\n", style="bold cyan")
+    console.print("Instructions: Kepler will prompt you with a sequence of tilts.")
+    console.print("Tilt the Smart Hub (Tilt Sensor) in that exact sequence to win!")
+    console.print("Directions: L = Left | R = Right | F = Forward | B = Backward")
+    console.input("\nPress Enter to start Round 1...")
+    
+    round_num = 1
+    playing = True
+    directions = ["L", "R", "F", "B"]
+    beep_freqs = {"L": 500, "R": 700, "F": 900, "B": 1100}
+    led_colors = {"L": "blue", "R": "orange", "F": "green", "B": "red"}
+    
+    try:
+        while playing:
+            import random
+            seq = [random.choice(directions) for _ in range(round_num + 1)]
+            
+            console.print(f"\n[bold yellow]Round {round_num}: Watch the sequence...[/bold yellow]")
+            time.sleep(1.0)
+            
+            for direction in seq:
+                console.print(f"Kepler tilts: [bold cyan]{direction}[/bold cyan]")
+                try:
+                    pet.hub.set_led(led_colors[direction])
+                    pet.hub.beep(beep_freqs[direction], 400)
+                except Exception:
+                    pass
+                time.sleep(0.5)
+                try:
+                    pet.hub.set_led("green")
+                except Exception:
+                    pass
+                time.sleep(0.2)
+                
+            console.print("\n[bold cyan]YOUR TURN! Perform the sequence now (hold tilt until beep)...[/bold cyan]")
+            
+            user_seq = []
+            for step in range(len(seq)):
+                console.print(f"Action {step+1}/{len(seq)}:")
+                action = None
+                while action is None:
+                    tilt_p = pet.hub.check_connected("Tilt Sensor")
+                    tilt_val = pet.hub.sensor_cache[tilt_p]["tilt"] if tilt_p else "Neutral"
+                    if tilt_val == "Left": action = "L"
+                    elif tilt_val == "Right": action = "R"
+                    elif tilt_val == "Forward": action = "F"
+                    elif tilt_val == "Backward": action = "B"
+                    time.sleep(0.1)
+                
+                user_seq.append(action)
+                console.print(f"Detected: [bold green]{action}[/bold green]")
+                try:
+                    pet.hub.beep(beep_freqs[action], 200)
+                except Exception:
+                    pass
+                time.sleep(0.8)
+                
+            if user_seq == seq:
+                console.print("[green]Correct! Kepler wags his tail in joy![/green]")
+                try:
+                    pet.hub.set_led("green")
+                    pet.hub.set_motor(50)
+                    time.sleep(0.3)
+                    pet.hub.stop_motor()
+                except Exception:
+                    pass
+                pet.gain_xp(30)
+                round_num += 1
+                console.input("\nPress Enter to begin the next round...")
+            else:
+                console.print(f"[red]Wrong! The sequence was: {' - '.join(seq)}[/red]")
+                try:
+                    pet.hub.beep(250, 500)
+                except Exception:
+                    pass
+                playing = False
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.stop_motor()
+            pet.hub.set_led("green")
+        except Exception:
+            pass
+        
+    console.print(f"\n[green]Game Over! Total rounds completed: {round_num - 1}![/green]")
+    console.input("\nPress Enter to return to games menu...")
+
 
 def run_simon_says_game(pet):
     console.clear()
