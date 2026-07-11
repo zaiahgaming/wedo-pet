@@ -34,6 +34,12 @@ try:
 except ImportError:
     robot_midi = None
 
+try:
+    import pystray
+    from PIL import Image, ImageDraw
+except ImportError:
+    pystray = None
+
 import math
 
 class SmallBrainNN:
@@ -553,11 +559,80 @@ class DeskPet:
 
         self.add_log(f"Pet {self.pet_name} initialized. Welcome!")
 
+        # Setup SIGHUP/SIGBREAK signal handlers to detach terminal and run in background
+        import signal
+        def handle_detach(signum, frame):
+            self.add_log("Terminal window closed! Detaching and running in background system tray...")
+            try:
+                sys.stdout = open(os.devnull, 'w')
+                sys.stderr = open(os.devnull, 'w')
+            except Exception:
+                pass
+
+        if hasattr(signal, 'SIGHUP'):
+            signal.signal(signal.SIGHUP, handle_detach)
+        if hasattr(signal, 'SIGBREAK'):
+            signal.signal(signal.SIGBREAK, handle_detach)
+
+        # Start the background system tray icon thread if pystray is available
+        if pystray:
+            threading.Thread(target=self._start_system_tray, daemon=True).start()
 
         # Start autonomous behavior thread
         self.brain_thread = threading.Thread(target=self._brain_loop, daemon=True)
         self.brain_thread.start()
 
+
+
+    def _start_system_tray(self):
+        def create_tray_image():
+            # Create a 64x64 icon representing WeDo status
+            image = Image.new('RGB', (64, 64), color=(30, 30, 30))
+            draw = ImageDraw.Draw(image)
+            # Active status color (green)
+            draw.ellipse((8, 8, 56, 56), fill=(0, 230, 118))
+            draw.ellipse((22, 22, 42, 42), fill=(255, 255, 255))
+            return image
+
+        def on_show_dashboard(icon, item):
+            import platform
+            import subprocess
+            script_path = os.path.abspath(sys.argv[0])
+            try:
+                if platform.system() == "Linux":
+                    try:
+                        subprocess.Popen(["gnome-terminal", "--", "python3", script_path])
+                    except Exception:
+                        subprocess.Popen(["xterm", "-e", "python3", script_path])
+                elif platform.system() == "Windows":
+                    subprocess.Popen(["cmd.exe", "/c", "start", "python", script_path], shell=True)
+                elif platform.system() == "Darwin":
+                    cmd = f'tell application "Terminal" to do script "python3 {script_path}"'
+                    subprocess.Popen(["osascript", "-e", cmd])
+            except Exception as e:
+                self.add_log(f"Error launching terminal: {e}")
+
+        def on_exit(icon, item):
+            icon.stop()
+            self.is_running = False
+            try:
+                self.hub.stop_motor()
+            except Exception:
+                pass
+            os._exit(0)
+
+        menu = pystray.Menu(
+            pystray.MenuItem("Show Telemetry Dashboard", on_show_dashboard),
+            pystray.MenuItem("Exit Pet Application", on_exit)
+        )
+        
+        self.tray_icon = pystray.Icon(
+            "wedo_pet",
+            create_tray_image(),
+            menu=menu,
+            title=f"WeDo Pet: {self.pet_name} (Running)"
+        )
+        self.tray_icon.run()
 
     def add_log(self, msg):
         timestamp = time.strftime("%H:%M:%S")
