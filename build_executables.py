@@ -39,14 +39,9 @@ def main():
     hidden_imp = hidden_imports.get(platform_key, "bleak.backends.bluezdbus")
     bin_name = binary_names.get(platform_key, "desk_pet_binary")
     
-    # Calculate search paths
-    workspace_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.dirname(workspace_dir)
-    
     build_cmd = [
         "pyinstaller",
         "--onefile",
-        f"--paths={parent_dir}",
         f"--hidden-import={hidden_imp}",
         f"--name={bin_name}",
         "desk_pet.py"
@@ -54,11 +49,12 @@ def main():
     
     print("\n--- Build Instructions for All OS ---")
     print("1. Linux Compilation:")
-    print("   pyinstaller --onefile --paths=../ --hidden-import=bleak.backends.bluezdbus --name=desk_pet_linux desk_pet.py\n")
+    print("   pyinstaller --onefile --hidden-import=bleak.backends.bluezdbus --name=desk_pet_linux desk_pet.py\n")
     print("2. Windows Compilation:")
-    print("   pyinstaller --onefile --paths=../ --hidden-import=bleak.backends.winrt --name=desk_pet_windows desk_pet.py\n")
+    print("   pyinstaller --onefile --hidden-import=bleak.backends.winrt --name=desk_pet_windows desk_pet.py\n")
     print("3. macOS Compilation:")
-    print("   pyinstaller --onefile --paths=../ --hidden-import=bleak.backends.corebluetooth --name=desk_pet_macos desk_pet.py\n")
+    print("   pyinstaller --onefile --hidden-import=bleak.backends.corebluetooth --name=desk_pet_macos desk_pet.py\n")
+
     
     print("Would you like to build for the current OS now? (y/n)")
     try:
