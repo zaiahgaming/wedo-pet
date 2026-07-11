@@ -533,21 +533,25 @@ class DeskPet:
         }
         return titles.get(self.level, "Ultimate Cosmic Companion 🌌")
 
+    def get_xp_needed(self):
+        return int((self.level ** 1.5) * 250)
+
     def gain_xp(self, amount):
         self.xp += amount
         if self.xp < 0:
             self.xp = 0
-        xp_needed = self.level * 100
+        xp_needed = self.get_xp_needed()
         if self.xp >= xp_needed:
             self.level_up()
         else:
             self.save_state()
 
     def level_up(self):
-        xp_needed = self.level * 100
+        xp_needed = self.get_xp_needed()
         self.xp = max(0, self.xp - xp_needed)
         self.level += 1
         self.add_log(f"★ LEVEL UP! ★ {self.pet_name} reached Level {self.level} ({self.get_level_title()})!")
+
         
         # Ascending chime beeps
         def play_level_chimes():
@@ -1446,7 +1450,7 @@ def make_layout(pet, hub_type) -> Layout:
     else:
         tilt_str = "[#888888]Not Connected[/#888888]"
 
-    xp_needed = pet.level * 100
+    xp_needed = pet.get_xp_needed()
     xp_pct = min(100, max(0, int((pet.xp / xp_needed) * 100)))
     ai_status = "[bold #00E676]ON[/bold #00E676]" if pet.ai_autopilot else "[bold #FF1744]OFF[/bold #FF1744]"
 
@@ -1550,13 +1554,16 @@ def print_main_menu(pet):
     table.add_row("[7]", "Tuning & Manual Hardware Overrides", "[Control motor speed, light colors, or beep]")
     table.add_row("[8]", "Change Pet Profile", f"[Current: {pet.profile}]")
     table.add_row("[9]", "Hub Status & Telemetry Summary", "[Quick diagnostic output]")
-    table.add_row("[a]", "Toggle Ollama AI Autopilot Mode", f"[Currently: {'ON' if pet.ai_autopilot else 'OFF'}]")
-    table.add_row("[c]", "Chat with Pet (Ollama AI)", "[Query your local qwen2.5:3b model]")
-    table.add_row("[t]", "User Training & Manual", "[Explanatory guide for UI layouts and sounds]")
+    table.add_row(Text("[g]"), "Play Games & Live Tutorial", "[Obstacle Course, Simon Says, and interactive guides]")
+    table.add_row(Text("[o]"), "Ollama Local LLM Setup Helper", "[Install Ollama or pull qwen2.5:3b model]")
+    table.add_row(Text("[a]"), "Toggle Ollama AI Autopilot Mode", f"[Currently: {'ON' if pet.ai_autopilot else 'OFF'}]")
+    table.add_row(Text("[c]"), "Chat with Pet (Ollama AI)", "[Query your local qwen2.5:3b model]")
+    table.add_row(Text("[t]"), "User Training & Manual", "[Explanatory guide for UI layouts and sounds]")
     if "(MOCK)" in pet.hub.hub_name:
-        table.add_row("[b]", "Simulate Hub Button Click", "[Simulate physical button press for feeding challenge]")
+        table.add_row(Text("[b]"), "Simulate Hub Button Click", "[Simulate physical button press for feeding challenge]")
     table.add_row("[0]", "Exit", "[Gracefully disconnect and close]")
     console.print(table)
+
 
 def handle_training_manual():
     console.clear()
@@ -1979,9 +1986,332 @@ def select_hub_flow(default_hub_name):
 
 
 # -----------------------------------------------------------------
+# WeDo Games & Interactive Tutorial
+# -----------------------------------------------------------------
+def handle_games_menu(pet):
+    while True:
+        console.clear()
+        table = Table(title="🎮 WeDo 2.0 Pet Arcade & Games Menu 🎮", border_style="bold green")
+        table.add_column("No.", style="yellow", justify="right")
+        table.add_column("Game Mode", style="cyan")
+        table.add_column("Description", style="white")
+        table.add_row("1", "Interactive Live Tutorial", "Step-by-step walk through sensors and triggers")
+        table.add_row("2", "Obstacle Course (Stop-Before-Crash)", "Autonomous navigation game with distance sensor")
+        table.add_row("3", "Color Simon Says", "Memorize LED color patterns and repeat them")
+        table.add_row("0", "Back to Main Menu", "Return to home menu")
+        console.print(table)
+        
+        choice = console.input("\n[bold cyan]Choose game option: [/bold cyan]").strip()
+        if choice == "0":
+            break
+        elif choice == "1":
+            run_interactive_tutorial(pet)
+        elif choice == "2":
+            run_obstacle_course_game(pet)
+        elif choice == "3":
+            run_simon_says_game(pet)
+        else:
+            console.print("[red]Invalid selection.[/red]")
+            time.sleep(1.0)
+
+def run_interactive_tutorial(pet):
+    console.clear()
+    console.print("=== 🎓 Interactive WeDo Desk Pet Tutorial ===\n", style="bold green")
+    console.print("This live tutorial will guide you through WeDo 2.0 sensors and behaviors.\n")
+    
+    # Step 1: Petting (Distance Sensor)
+    console.print("[yellow]Step 1: Direct Petting Challenge[/yellow]")
+    console.print("Put your hand or an object within [bold cyan]6cm[/bold cyan] of the Distance Sensor to pet Kepler.")
+    console.print("Waiting for sensor input...")
+    
+    start_t = time.time()
+    pet_detected = False
+    while time.time() - start_t < 15.0:
+        dist = 10
+        dist_p = pet.hub.check_connected("Distance Sensor")
+        if dist_p:
+            dist = pet.hub.sensor_cache[dist_p]["distance"]
+        if dist < 6:
+            pet_detected = True
+            break
+        time.sleep(0.1)
+        
+    if pet_detected:
+        console.print("\n[green]Success! Petting detected! Kepler wagged his tail and chirped happily.[/green]\n")
+        pet.interact_pet()
+    else:
+        console.print("\n[red]Timeout: No petting detected. (Make sure distance sensor is plugged into Port 1 or 2).[/red]\n")
+    console.input("Press Enter to proceed to Step 2...")
+    
+    # Step 2: Dizziness (Tilt Sensor)
+    console.clear()
+    console.print("=== 🎓 Interactive WeDo Desk Pet Tutorial ===\n", style="bold green")
+    console.print("[yellow]Step 2: Tilt Dizziness Demonstration[/yellow]")
+    console.print("Tilt the Smarthub in [bold cyan]any direction[/bold cyan] (Forward, Backward, Left, or Right).")
+    console.print("Waiting for tilt input...")
+    
+    start_t = time.time()
+    tilt_detected = False
+    while time.time() - start_t < 15.0:
+        tilt = "Neutral"
+        tilt_p = pet.hub.check_connected("Tilt Sensor")
+        if tilt_p:
+            tilt = pet.hub.sensor_cache[tilt_p]["tilt"]
+        if tilt != "Neutral" and tilt != "Unknown":
+            tilt_detected = True
+            break
+        time.sleep(0.1)
+        
+    if tilt_detected:
+        console.print(f"\n[green]Success! Tilt '{tilt}' detected. Kepler is now dizzy! (@_@)[/green]\n")
+        for _ in range(4):
+            try:
+                pet.hub.beep(400, 100)
+                time.sleep(0.05)
+                pet.hub.beep(300, 100)
+                time.sleep(0.05)
+            except Exception:
+                pass
+    else:
+        console.print("\n[red]Timeout: No tilt detected. (Make sure tilt sensor is plugged into Port 1 or 2).[/red]\n")
+    console.input("Press Enter to proceed to Step 3...")
+    
+    # Step 3: Feeding Challenge
+    console.clear()
+    console.print("=== 🎓 Interactive WeDo Desk Pet Tutorial ===\n", style="bold green")
+    console.print("[yellow]Step 3: Feeding Challenge Demonstration[/yellow]")
+    console.print("Let's simulate a hunger fit! The LED light will turn RED. You must wait for it to turn GREEN,")
+    console.print("then click the physical button (or simulate click using option 'b').")
+    console.input("Press Enter to start simulation...")
+    
+    pet.screaming_for_food = True
+    pet.screaming_cycle_start = time.time()
+    
+    while pet.screaming_for_food and pet.is_running:
+        time.sleep(0.2)
+        
+    console.print("\n[green]Great job! You finished the interactive tutorial. Kepler is fully trained![/green]")
+    console.input("\nPress Enter to return to games menu...")
+
+def run_obstacle_course_game(pet):
+    console.clear()
+    console.print("=== 🚗 Obstacle Course Avoidance Game ===\n", style="bold cyan")
+    console.print("Instructions: Position your WeDo robot car on a clear path on your desk.")
+    console.print("We will run the motor forward at speed 45.")
+    console.print("As soon as the distance sensor detects an obstacle (< 5cm), the robot will brake, beep,")
+    console.print("and reverse at speed -50 for 1.2 seconds to avoid crashing!")
+    console.print("Press Ctrl+C or type 'exit' during the game to abort.")
+    console.input("\nPress Enter to start driving...")
+    
+    score = 0
+    driving = True
+    try:
+        while driving:
+            console.print(f"[green]Driving forward... Score (Avoided obstacles): {score}[/green]")
+            try:
+                pet.hub.set_motor(45)
+            except Exception:
+                pass
+                
+            obstacle_avoided = False
+            start_check = time.time()
+            while time.time() - start_check < 6.0:
+                dist = 10
+                dist_p = pet.hub.check_connected("Distance Sensor")
+                if dist_p:
+                    dist = pet.hub.sensor_cache[dist_p]["distance"]
+                if dist <= 5:
+                    obstacle_avoided = True
+                    break
+                time.sleep(0.1)
+                
+            if obstacle_avoided:
+                console.print(f"[yellow]⚠️ Obstacle detected at {dist}cm! Braking and reversing![/yellow]")
+                try:
+                    pet.hub.stop_motor()
+                    pet.hub.beep(1000, 100)
+                    time.sleep(0.05)
+                    pet.hub.beep(1200, 150)
+                    pet.hub.set_motor(-50)
+                    time.sleep(1.2)
+                    pet.hub.stop_motor()
+                except Exception:
+                    pass
+                score += 1
+                pet.gain_xp(15)
+                
+                cont = console.input("\nAvoided! Continue driving? (y/n): ").strip().lower()
+                if cont == "n":
+                    driving = False
+            else:
+                console.print("[yellow]Clear path! No obstacles detected for 6 seconds. Pausing...[/yellow]")
+                try:
+                    pet.hub.stop_motor()
+                except Exception:
+                    pass
+                cont = console.input("Continue driving? (y/n): ").strip().lower()
+                if cont == "n":
+                    driving = False
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.stop_motor()
+        except Exception:
+            pass
+    console.print(f"\n[green]Game Over! Total obstacles avoided: {score}. Total XP gained: {score * 15}![/green]")
+    console.input("\nPress Enter to return to games menu...")
+
+def run_simon_says_game(pet):
+    console.clear()
+    console.print("=== 🔴 Simon Says Color Game 🟢 ===\n", style="bold cyan")
+    console.print("Kepler will show you a sequence of LED colors (Red, Green, Blue).")
+    console.print("You must memorize the sequence and type the colors in order (e.g. 'rgb' or 'gbr').")
+    console.print("Each correct sequence gains Kepler +20 XP!")
+    console.input("\nPress Enter to begin Round 1...")
+    
+    colors_map = {
+        "r": ("red", 500),
+        "g": ("green", 700),
+        "b": ("blue", 900)
+    }
+    
+    round_num = 1
+    playing = True
+    while playing:
+        import random
+        seq = [random.choice(["r", "g", "b"]) for _ in range(round_num + 1)]
+        
+        console.print(f"\n[yellow]Round {round_num}: Watch Kepler's LED light...[/yellow]")
+        time.sleep(1.0)
+        
+        for char in seq:
+            col_name, freq = colors_map[char]
+            try:
+                pet.hub.set_led(col_name)
+                pet.hub.beep(freq, 300)
+            except Exception:
+                pass
+            time.sleep(0.4)
+            try:
+                pet.hub.set_led("off")
+            except Exception:
+                pass
+            time.sleep(0.2)
+            
+        ans = console.input("[cyan]Enter sequence (r=red, g=green, b=blue): [/cyan]").strip().lower()
+        ans_clean = "".join([c for c in ans if c in ["r", "g", "b"]])
+        
+        expected = "".join(seq)
+        if ans_clean == expected:
+            console.print("[green]Correct! Kepler wags his tail happily![/green]")
+            try:
+                pet.hub.beep(800, 100)
+                pet.hub.beep(1000, 100)
+                pet.hub.beep(1200, 150)
+            except Exception:
+                pass
+            pet.gain_xp(20)
+            round_num += 1
+            cont = console.input("Proceed to next round? (y/n): ").strip().lower()
+            if cont == "n":
+                playing = False
+        else:
+            console.print(f"[red]Wrong! Expected sequence was: {expected.upper()}[/red]")
+            try:
+                pet.hub.beep(200, 400)
+            except Exception:
+                pass
+            playing = False
+            
+    console.print(f"\n[green]Game Over! Reached Round {round_num}. Kepler is proud of you![/green]")
+    console.input("\nPress Enter to return to games menu...")
+
+
+# -----------------------------------------------------------------
+# Ollama Setup Installer helpers
+# -----------------------------------------------------------------
+def handle_ollama_setup(pet):
+    while True:
+        console.clear()
+        console.print("=== 🧠 Ollama Local LLM AI Setup Helper ===\n", style="bold cyan")
+        
+        running = False
+        import urllib.request
+        try:
+            req = urllib.request.Request("http://localhost:11434/api/tags")
+            with urllib.request.urlopen(req, timeout=1) as r:
+                if r.status == 200:
+                    running = True
+        except Exception:
+            pass
+            
+        status_str = "[bold green]ONLINE (Running)[/bold green]" if running else "[bold red]OFFLINE (Not Detected)[/bold red]"
+        console.print(f"Ollama Server Status: {status_str}\n")
+        
+        console.print("This helper allows you to automatically install Ollama or pull models directly.")
+        console.print("[1] Install Ollama (Linux install script via curl)")
+        console.print("[2] Download / Pull qwen2.5:3b Model (Required for brain)")
+        console.print("[3] Test Chat with Ollama")
+        console.print("[0] Return to Main Menu")
+        
+        choice = console.input("\n[bold cyan]Choose option: [/bold cyan]").strip()
+        if choice == "0":
+            break
+        elif choice == "1":
+            install_ollama_command()
+        elif choice == "2":
+            pull_qwen_command()
+        elif choice == "3":
+            if not running:
+                console.print("[red]Error: Ollama server is offline. Please start it first.[/red]")
+                time.sleep(1.5)
+                continue
+            console.print("[cyan]Connecting to qwen2.5:3b model...[/cyan]")
+            res = pet.query_ollama("Hello, test beep command!")
+            if res:
+                console.print(f"[green]Success! Responded: {res.get('speech')}[/green]")
+            else:
+                console.print("[red]Failed: Did you pull 'qwen2.5:3b' yet?[/red]")
+            console.input("\nPress Enter to continue...")
+
+def install_ollama_command():
+    console.print("\n[cyan]Starting Ollama installation... (requires sudo and curl)[/cyan]")
+    console.print("Running command: curl -fsSL https://ollama.com/install.sh | sh")
+    console.print("[yellow]Please review and approve command execution when prompted by system...[/yellow]\n")
+    import subprocess
+    try:
+        proc = subprocess.Popen("curl -fsSL https://ollama.com/install.sh | sh", shell=True)
+        proc.wait()
+        console.print("\n[green]Ollama installation process completed.[/green]")
+    except Exception as e:
+        console.print(f"[red]Error starting installer: {e}[/red]")
+    console.input("\nPress Enter to return...")
+
+def pull_qwen_command():
+    console.print("\n[cyan]Starting: ollama pull qwen2.5:3b[/cyan]")
+    console.print("This will download the 1.9GB model. Please wait, this might take a few minutes...")
+    import subprocess
+    try:
+        proc = subprocess.Popen(["ollama", "pull", "qwen2.5:3b"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        for line in proc.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+        proc.wait()
+        if proc.returncode == 0:
+            console.print("\n[green]Successfully downloaded qwen2.5:3b model![/green]")
+        else:
+            console.print(f"\n[red]Failed to pull model. Return code: {proc.returncode}[/red]")
+    except Exception as e:
+        console.print(f"[red]Error starting ollama pull: {e}[/red]")
+    console.input("\nPress Enter to return...")
+
+
+# -----------------------------------------------------------------
 # CLI Connection Launcher & Arguments
 # -----------------------------------------------------------------
 def main():
+
 
 
     parser = argparse.ArgumentParser(description="Start the interactive LEGO WeDo 2.0 CLI Desk Pet.")
@@ -2037,7 +2367,8 @@ def main():
     try:
         while pet.is_running:
             print_main_menu(pet)
-            choice = console.input("[bold green]Choose an action (0-9, a, c, b): [/bold green]").strip().lower()
+            choice = console.input("[bold green]Choose an action (0-9, a, c, b, g, o, t): [/bold green]").strip().lower()
+
 
             if choice == "1":
                 run_live_dashboard(pet, hub_type)
@@ -2082,6 +2413,10 @@ def main():
                 time.sleep(1.0)
             elif choice == "c":
                 handle_chat_mode(pet)
+            elif choice == "g":
+                handle_games_menu(pet)
+            elif choice == "o":
+                handle_ollama_setup(pet)
             elif choice == "t":
                 handle_training_manual()
             elif choice == "b" and "(MOCK)" in hub.hub_name:
@@ -2092,6 +2427,7 @@ def main():
                 threading.Thread(target=simulate_click, daemon=True).start()
                 console.print("[yellow]Simulating physical button click on WeDo Smarthub...[/yellow]")
                 time.sleep(0.6)
+
 
             elif choice == "0":
                 console.print("[cyan]Disconnecting from LEGO Smarthub...[/cyan]")
