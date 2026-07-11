@@ -90,5 +90,48 @@ class TestDeskPet(unittest.TestCase):
         self.hub.stop_motor()
         self.assertEqual(self.hub.motor_speed, 0)
 
+    def test_dynamic_games_filtering(self):
+        dist_p = self.hub.check_connected("Distance Sensor")
+        motor_p = self.hub.check_connected("Motor")
+        self.assertTrue(dist_p and motor_p)
+        
+        options = ["Tutorial"]
+        if dist_p and motor_p:
+            options.append("Obstacle Course")
+        options.append("Simon Says")
+        self.assertIn("Obstacle Course", options)
+        
+        self.hub.port_data = ["Motor"]
+        dist_p_missing = self.hub.check_connected("Distance Sensor")
+        self.assertFalse(dist_p_missing)
+        
+        options_missing = ["Tutorial"]
+        if dist_p_missing and motor_p:
+            options_missing.append("Obstacle Course")
+        options_missing.append("Simon Says")
+        self.assertNotIn("Obstacle Course", options_missing)
+
+    def test_animated_face_profiles(self):
+        self.pet.change_profile("Puppy")
+        self.assertEqual(self.pet.profile, "Puppy")
+        face = self.pet.get_face()
+        self.assertTrue(len(face) > 0)
+        
+        self.pet.change_profile("Kitten")
+        self.assertEqual(self.pet.profile, "Kitten")
+        face = self.pet.get_face()
+        self.assertTrue(len(face) > 0)
+
+        self.pet.change_profile("Robot")
+        self.assertEqual(self.pet.profile, "Robot")
+        face = self.pet.get_face()
+        self.assertTrue(len(face) > 0)
+
+        self.pet.change_profile("Penguin")
+        self.assertEqual(self.pet.profile, "Penguin")
+        face = self.pet.get_face()
+        self.assertTrue(len(face) > 0)
+
 if __name__ == "__main__":
     unittest.main()
+

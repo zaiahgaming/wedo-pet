@@ -209,7 +209,7 @@ def choose_option_interactive(title, options, prompt_message="Use Up/Down arrows
 def print_main_menu_interactive(pet, selected_idx):
     from rich.align import Align
     
-    face_art = pet.profile_art.get(pet.mood, "(•‿•)")
+    face_art = pet.get_face()
     
     e_color = "#00E676" if pet.energy > 50 else "#FFEB3B" if pet.energy > 20 else "#FF1744"
     h_color = "#00E676" if pet.happiness > 50 else "#FFEB3B" if pet.happiness > 20 else "#FF1744"
