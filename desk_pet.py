@@ -228,18 +228,45 @@ def read_key(timeout=10.0):
                 set_terminal_raw(False)
 
 def choose_option_interactive(title, options, prompt_message="Use Up/Down arrows and press Enter to select:"):
+    from rich.console import Group
+    from rich.rule import Rule
+    from rich.table import Table
+    from rich.text import Text
+    
     idx = 0
     while True:
         console.clear()
-        console.print(Panel(Text(f"🐾 {title} 🐾", style="bold green", justify="center"), border_style="green"))
         
+        # Build options text with neon highlights
+        menu_text = Text()
         for i, opt in enumerate(options):
             if i == idx:
-                console.print(Text(f"  ▶  {opt}", style="bold #00E676"))
+                menu_text.append(f"  ⚡  {opt}\n", style="bold #00E676")
             else:
-                console.print(Text(f"     {opt}", style="dim"))
-                
-        console.print(f"\n[dim]{prompt_message}[/dim]")
+                menu_text.append(f"     {opt}\n", style="dim #B0BEC5")
+        
+        # Control bar layout
+        controls = Table.grid(expand=True)
+        controls.add_column(justify="left")
+        controls.add_column(justify="right")
+        controls.add_row(
+            Text(prompt_message, style="#00E5FF italic"),
+            Text("⌨ Up/Down = Move | Enter = Select | Esc = Back", style="dim yellow")
+        )
+        
+        panel_content = Group(
+            menu_text,
+            Rule(style="dim #37474F"),
+            controls
+        )
+        
+        console.print(Panel(
+            panel_content,
+            title=Text(f"🐾 {title} 🐾", style="bold #00F5D4"),
+            title_align="center",
+            border_style="#00E5FF",
+            padding=(1, 2)
+        ))
         
         key = read_key()
         if key == "up":
@@ -1567,21 +1594,26 @@ class DeskPet:
         energy_bonus = 15
         xp_gained = 30
         
-        if sys.stdin.isatty() and "unittest" not in sys.modules:
+        is_main = threading.current_thread() is threading.main_thread()
+        if sys.stdin.isatty() and "unittest" not in sys.modules and is_main:
             set_terminal_raw(False)
             try:
                 while True:
-                    console.print("\n--- 🛒 Gourmet Desk Pet Food Bakery ---", style="bold #00F5D4")
-                    console.print(f"Your Wallet: [bold yellow]🪙 {getattr(self, 'coins', 50)} Coins[/bold yellow]\n")
-                    console.print("1. 🍪 Standard Cookie    - Cost: Free     | Hunger: -25, Happiness: +10, Energy: +15, XP: +30")
-                    console.print("2. 🐟 Fresh Salmon       - Cost: 10 Coins | Hunger: -50, Happiness: +20, Energy: +15, XP: +40")
-                    console.print("3. 🥩 Prime Ribeye Steak - Cost: 25 Coins | Hunger: -80, Happiness: +35, Energy: +25, XP: +60")
-                    console.print("4. 🍨 Gourmet Sundae     - Cost: 15 Coins | Hunger: -15, Happiness: +50, Energy: +10, XP: +35")
-                    console.print("5. 🌟 Cosmic Star-Candy  - Cost: 50 Coins | Hunger: -40, Happiness: +60, Energy: +30, XP: +120")
-                    console.print("6. Cancel feeding")
+                    options = [
+                        "🍪 Standard Cookie    - Cost: Free     | Hunger: -25, Happiness: +10, Energy: +15, XP: +30",
+                        "🐟 Fresh Salmon       - Cost: 10 Coins | Hunger: -50, Happiness: +20, Energy: +15, XP: +40",
+                        "🥩 Prime Ribeye Steak - Cost: 25 Coins | Hunger: -80, Happiness: +35, Energy: +25, XP: +60",
+                        "🍨 Gourmet Sundae     - Cost: 15 Coins | Hunger: -15, Happiness: +50, Energy: +10, XP: +35",
+                        "🌟 Cosmic Star-Candy  - Cost: 50 Coins | Hunger: -40, Happiness: +60, Energy: +30, XP: +120",
+                        "Cancel feeding"
+                    ]
+                    sel = choose_option_interactive(
+                        f"Gourmet Food Bakery (Wallet: 🪙 {getattr(self, 'coins', 50)} Coins)",
+                        options,
+                        prompt_message=f"What would you like to feed {self.pet_name}?"
+                    )
                     
-                    choice = console.input(f"\n[cyan]What would you like to feed {self.pet_name}? (1-6): [/cyan]").strip()
-                    if choice == "1":
+                    if sel == 0:
                         food_name = "Standard Cookie 🍪"
                         cost = 0
                         hunger_reduction = 25
@@ -1589,7 +1621,7 @@ class DeskPet:
                         energy_bonus = 15
                         xp_gained = 30
                         break
-                    elif choice == "2":
+                    elif sel == 1:
                         if self.coins >= 10:
                             food_name = "Fresh Salmon 🐟"
                             cost = 10
@@ -1600,7 +1632,8 @@ class DeskPet:
                             break
                         else:
                             console.print("[red]Insufficient coins! You cannot afford Fresh Salmon.[/red]")
-                    elif choice == "3":
+                            time.sleep(1.0)
+                    elif sel == 2:
                         if self.coins >= 25:
                             food_name = "Prime Ribeye Steak 🥩"
                             cost = 25
@@ -1611,7 +1644,8 @@ class DeskPet:
                             break
                         else:
                             console.print("[red]Insufficient coins! You cannot afford Prime Ribeye Steak.[/red]")
-                    elif choice == "4":
+                            time.sleep(1.0)
+                    elif sel == 3:
                         if self.coins >= 15:
                             food_name = "Gourmet Sundae 🍨"
                             cost = 15
@@ -1622,7 +1656,8 @@ class DeskPet:
                             break
                         else:
                             console.print("[red]Insufficient coins! You cannot afford a Gourmet Sundae.[/red]")
-                    elif choice == "5":
+                            time.sleep(1.0)
+                    elif sel == 4:
                         if self.coins >= 50:
                             food_name = "Cosmic Star-Candy 🌟"
                             cost = 50
@@ -1633,11 +1668,10 @@ class DeskPet:
                             break
                         else:
                             console.print("[red]Insufficient coins! You cannot afford Cosmic Star-Candy.[/red]")
-                    elif choice == "6":
+                            time.sleep(1.0)
+                    elif sel == 5 or sel == -1:
                         console.print("[yellow]Feeding cancelled.[/yellow]")
                         return
-                    else:
-                        console.print("[red]Invalid choice. Select 1 to 6.[/red]")
             finally:
                 set_terminal_raw(True)
                 
@@ -3076,13 +3110,14 @@ def handle_chat_mode(pet):
 
 
 def handle_music_center(pet):
-    console.print("\n--- ♫ WeDo Music Center ♫ ---", style="bold magenta")
-    console.print("1. Search song on BitMIDI and play")
-    console.print("2. Play local MIDI file")
-    console.print("3. Back to main menu")
-    choice = console.input("[magenta]Select choice: [/magenta]").strip()
+    options = [
+        "Search song on BitMIDI and play",
+        "Play local MIDI file",
+        "Back to main menu"
+    ]
+    sel = choose_option_interactive("WeDo Music Center ♫", options, "Select a music options category:")
 
-    if choice == "1":
+    if sel == 0:
         query = console.input("[magenta]Enter search query (e.g. 'mario', 'tetris', 'zelda'): [/magenta]").strip()
         if query:
             console.print(f"[cyan]Searching BitMIDI for '{query}'...[/cyan]")
@@ -3150,7 +3185,7 @@ def handle_music_center(pet):
                     else:
                         console.print("[red]Invalid choice.[/red]")
 
-    elif choice == "2":
+    elif sel == 1:
         path = console.input("[magenta]Enter path to local MIDI file: [/magenta]").strip()
         if os.path.exists(path):
             pet.play_midi(filename=path)
@@ -3162,30 +3197,31 @@ def handle_music_center(pet):
 
 def handle_tuning_menu(pet):
     while True:
-        console.print("\n--- ⚙ Manual Hardware Tuning ---", style="bold cyan")
-        console.print("1. Set Smart Hub LED Color")
-        console.print("2. Run Medium Motor (Manual Speed)")
-        console.print("3. Stop Motor")
-        console.print("4. Play Custom Freq Beep")
-        console.print("5. Neural Network Tuning & Debug Center")
-        console.print("6. Back to main menu")
-        choice = console.input("[cyan]Select tuning option: [/cyan]").strip()
+        options = [
+            "Set Smart Hub LED Color",
+            "Run Medium Motor (Manual Speed)",
+            "Stop Motor",
+            "Play Custom Freq Beep",
+            "Neural Network Tuning & Debug Center",
+            "Back to main menu"
+        ]
+        sel = choose_option_interactive("Manual Hardware Tuning", options, "Select a tuning or debug action:")
 
-        if choice == "1":
+        if sel == 0:
             color = console.input("[cyan]Enter color name (red, green, blue, yellow, teal, pink, purple, off): [/cyan]").strip()
             pet.hub.set_led(color)
             console.print(f"[green]LED set to: {color}[/green]")
-        elif choice == "2":
+        elif sel == 1:
             try:
                 speed = int(console.input("[cyan]Enter motor speed (-100 to 100): [/cyan]"))
                 pet.hub.set_motor(speed)
                 console.print(f"[green]Motor running at speed: {speed}[/green]")
             except ValueError:
                 console.print("[red]Invalid speed. Must be an integer.[/red]")
-        elif choice == "3":
+        elif sel == 2:
             pet.hub.stop_motor()
             console.print("[green]Motor stopped.[/green]")
-        elif choice == "4":
+        elif sel == 3:
             try:
                 freq = int(console.input("[cyan]Enter frequency in Hz (200 - 5000): [/cyan]"))
                 dur = int(console.input("[cyan]Enter duration in ms: [/cyan]"))
@@ -3193,26 +3229,26 @@ def handle_tuning_menu(pet):
                 time.sleep(dur / 1000.0)
             except ValueError:
                 console.print("[red]Invalid frequency or duration.[/red]")
-        elif choice == "5":
+        elif sel == 4:
             handle_network_debug_menu(pet)
-        elif choice == "6":
+        elif sel == 5 or sel == -1:
             break
         time.sleep(0.5)
 
 def handle_network_debug_menu(pet):
     while True:
-        console.clear()
-        console.print("=== 🔬 SmallBrain™ Neural Net Debug Center ===", style="bold #00F5D4")
-        console.print("1. Mutate Network Weights (Add slight random noise)")
-        console.print("2. Mutate Network Biases (Add slight random noise)")
-        console.print("3. Reset Network to Factory Default (Pre-trained)")
-        console.print("4. Set Learning Rate & Epochs")
-        console.print("5. Run Manual Backpropagation Test Case")
-        console.print("6. Launch 3D Synaptic Brain Visualizer (Likes & Dislikes)")
-        console.print("7. Return to Tuning menu")
-        choice = console.input("\n[cyan]Select debug option: [/cyan]").strip()
+        options = [
+            "Mutate Network Weights (Add slight random noise)",
+            "Mutate Network Biases (Add slight random noise)",
+            "Reset Network to Factory Default (Pre-trained)",
+            "Set Learning Rate & Epochs",
+            "Run Manual Backpropagation Test Case",
+            "Launch 3D Synaptic Brain Visualizer (Likes & Dislikes)",
+            "Return to Tuning menu"
+        ]
+        sel = choose_option_interactive("Neural Net Debug Center", options, "Select a diagnostic action:")
         
-        if choice == "1":
+        if sel == 0:
             mutation_rate = 0.05
             for i in range(len(pet.local_brain_nn.W1)):
                 for j in range(len(pet.local_brain_nn.W1[i])):
@@ -3222,7 +3258,7 @@ def handle_network_debug_menu(pet):
                     pet.local_brain_nn.W2[i][j] += random.uniform(-mutation_rate, mutation_rate)
             console.print("[green]Weights mutated successfully![/green]")
             time.sleep(1.0)
-        elif choice == "2":
+        elif sel == 1:
             mutation_rate = 0.05
             for i in range(len(pet.local_brain_nn.b1)):
                 pet.local_brain_nn.b1[i] += random.uniform(-mutation_rate, mutation_rate)
@@ -3230,11 +3266,11 @@ def handle_network_debug_menu(pet):
                 pet.local_brain_nn.b2[i] += random.uniform(-mutation_rate, mutation_rate)
             console.print("[green]Biases mutated successfully![/green]")
             time.sleep(1.0)
-        elif choice == "3":
+        elif sel == 2:
             pet.local_brain_nn = train_default_brain()
             console.print("[green]Neural Network reset to factory pre-trained defaults.[/green]")
             time.sleep(1.0)
-        elif choice == "4":
+        elif sel == 3:
             try:
                 lr = float(console.input("[cyan]Enter new learning rate (0.01 - 1.0): [/cyan]"))
                 epochs = int(console.input("[cyan]Enter target backprop epochs (10 - 2000): [/cyan]"))
@@ -3243,7 +3279,7 @@ def handle_network_debug_menu(pet):
             except ValueError:
                 console.print("[red]Invalid numerical value.[/red]")
                 time.sleep(1.0)
-        elif choice == "5":
+        elif sel == 4:
             console.print("\nForcing target input: [sleeping=1, dist=2cm, hunger=90%]")
             console.print("Target desired output: [Fall Asleep = 99%]")
             X = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.9, 0.5, 0.5, 1.0]
@@ -3252,9 +3288,9 @@ def handle_network_debug_menu(pet):
             pet.local_brain_nn.train([(X, target)], epochs=150, lr=0.3)
             console.print("[green]Training complete. Output for target state optimized![/green]")
             time.sleep(1.5)
-        elif choice == "6":
+        elif sel == 5:
             show_3d_network_visualizer(pet)
-        elif choice == "7":
+        elif sel == 6 or sel == -1:
             break
 
 def show_3d_network_visualizer(pet):
@@ -3567,32 +3603,27 @@ def create_new_pet_flow():
     return state
 
 def delete_pet_flow(files):
-    console.print("\n--- Delete a Saved Pet ---", style="bold red")
-    for idx, f in enumerate(sorted(files)):
-        console.print(f"[{idx + 1}] {f[:-5]}")
-    console.print("[0] Cancel")
+    sorted_files = sorted(files)
+    options = [f[:-5] for f in sorted_files] + ["Cancel"]
+    sel = choose_option_interactive("Delete a Saved Pet", options, "Select a pet profile to permanently delete:")
     
-    choice = console.input("\n[red]Choose pet to delete: [/red]").strip()
-    if choice == "0" or not choice:
+    if sel == -1 or sel == len(options) - 1:
         return
         
     try:
-        num = int(choice)
-        if 1 <= num <= len(files):
-            filename = sorted(files)[num - 1]
-            pet_name = filename[:-5]
-            confirm = console.input(f"[red]Are you sure you want to delete '{pet_name}'? (y/n): [/red]").strip().lower()
-            if confirm == "y":
-                os.remove(os.path.expanduser(f"~/.wedo_pets/{filename}"))
-                soul_path = os.path.expanduser(f"~/.wedo_pets/{pet_name}_soul.txt")
-                if os.path.exists(soul_path):
-                    os.remove(soul_path)
-                console.print(f"[green]Deleted '{pet_name}' successfully.[/green]")
-        else:
-            console.print("[red]Invalid selection.[/red]")
+        filename = sorted_files[sel]
+        pet_name = filename[:-5]
+        confirm = console.input(f"[red]Are you sure you want to delete '{pet_name}'? (y/n): [/red]").strip().lower()
+        if confirm == "y":
+            os.remove(os.path.expanduser(f"~/.wedo_pets/{filename}"))
+            soul_path = os.path.expanduser(f"~/.wedo_pets/{pet_name}_soul.txt")
+            if os.path.exists(soul_path):
+                os.remove(soul_path)
+            console.print(f"[green]Successfully deleted '{pet_name}'.[/green]")
+            time.sleep(1.0)
     except Exception as e:
-        console.print(f"[red]Delete error: {e}[/red]")
-    time.sleep(1.0)
+        console.print(f"[red]Error deleting pet: {e}[/red]")
+        time.sleep(1.5)
 
 
 # -----------------------------------------------------------------
@@ -5076,9 +5107,6 @@ def run_tug_of_war_game(pet):
 # -----------------------------------------------------------------
 def handle_ollama_setup(pet):
     while True:
-        console.clear()
-        console.print("=== 🧠 Ollama Local LLM AI Setup Helper ===\n", style="bold cyan")
-        
         running = False
         import urllib.request
         try:
@@ -5089,23 +5117,26 @@ def handle_ollama_setup(pet):
         except Exception:
             pass
             
-        status_str = "[bold green]ONLINE (Running)[/bold green]" if running else "[bold red]OFFLINE (Not Detected)[/bold red]"
-        console.print(f"Ollama Server Status: {status_str}\n")
+        status_str = "ONLINE" if running else "OFFLINE"
         
-        console.print("This helper allows you to automatically install Ollama or pull models directly.")
-        console.print("[1] Install Ollama (Linux install script via curl)")
-        console.print("[2] Download / Pull qwen2.5:3b Model (Required for brain)")
-        console.print("[3] Test Chat with Ollama")
-        console.print("[0] Return to Main Menu")
+        options = [
+            "Install Ollama (Linux install script via curl)",
+            "Download / Pull qwen2.5:3b Model (Required for brain)",
+            "Test Chat with Ollama",
+            "Return to Main Menu"
+        ]
         
-        choice = console.input("\n[bold cyan]Choose option: [/bold cyan]").strip()
-        if choice == "0":
-            break
-        elif choice == "1":
+        sel = choose_option_interactive(
+            f"Ollama Local LLM Setup (Status: {status_str})",
+            options,
+            "Choose an installer helper action:"
+        )
+        
+        if sel == 0:
             install_ollama_command()
-        elif choice == "2":
+        elif sel == 1:
             pull_qwen_command()
-        elif choice == "3":
+        elif sel == 2:
             if not running:
                 console.print("[red]Error: Ollama server is offline. Please start it first.[/red]")
                 time.sleep(1.5)
@@ -5117,6 +5148,8 @@ def handle_ollama_setup(pet):
             else:
                 console.print("[red]Failed: Did you pull 'qwen2.5:3b' yet?[/red]")
             console.input("\nPress Enter to continue...")
+        elif sel == 3 or sel == -1:
+            break
 
 def install_ollama_command():
     console.print("\n[cyan]Starting Ollama installation... (requires sudo and curl)[/cyan]")
