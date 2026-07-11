@@ -772,7 +772,7 @@ class DeskPet:
         
         # Profile settings
         self.profile = state_dict.get("profile", "Puppy")
-        self.pet_name = state_dict.get("pet_name", "Kepler")
+        self.pet_name = state_dict.get("pet_name", "Bob")
         
         # Leveling & XP
         self.level = state_dict.get("level", 1)
@@ -972,8 +972,8 @@ class DeskPet:
 
         menu = pystray.Menu(
             pystray.MenuItem("Feed Pet", on_feed),
-            pystray.MenuItem("Pet Kepler", on_pet),
-            pystray.MenuItem("Poke Kepler", on_poke),
+            pystray.MenuItem(f"Pet {self.pet_name}", on_pet),
+            pystray.MenuItem(f"Poke {self.pet_name}", on_poke),
             pystray.MenuItem("Play Happy Chime", on_chime),
             pystray.MenuItem("Toggle Autopilot", on_toggle_autopilot, checked=lambda item: self.ai_autopilot),
             pystray.Menu.SEPARATOR,
@@ -981,7 +981,7 @@ class DeskPet:
             pystray.MenuItem("Play Headless Game (No Screen)", on_play_headless),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Change Profile", pystray.Menu(
-                pystray.MenuItem("Puppy (Kepler)", on_profile("Puppy"), checked=lambda item: self.profile == "Puppy"),
+                pystray.MenuItem(f"Puppy ({self.pet_name})", on_profile("Puppy"), checked=lambda item: self.profile == "Puppy"),
                 pystray.MenuItem("Kitten (Luna)", on_profile("Kitten"), checked=lambda item: self.profile == "Kitten"),
                 pystray.MenuItem("Robot (RoboPet)", on_profile("Robot"), checked=lambda item: self.profile == "Robot"),
                 pystray.MenuItem("Penguin (Pingu)", on_profile("Penguin"), checked=lambda item: self.profile == "Penguin")
@@ -1434,7 +1434,7 @@ class DeskPet:
                 pass
             time.sleep(0.5)
         self.mood = "singing"
-        self.add_log("🎶 Rickroll! Kepler is playing 'Never Gonna Give You Up'! 🎶")
+        self.add_log(f"🎶 Rickroll! {self.pet_name} is playing 'Never Gonna Give You Up'! 🎶")
         
         # Start music in background
         self.play_midi(filename=None, query="Never Gonna Give You Up")
@@ -1463,7 +1463,7 @@ class DeskPet:
 
     def change_profile(self, name):
         profiles = {
-            "Puppy": ("Kepler", "Woof! Play with me!"),
+            "Puppy": ("Bob", "Woof! Play with me!"),
             "Kitten": ("Luna", "Meow.. Zzz..."),
             "Robot": ("RoboPet", "System online. Bip boop."),
             "Penguin": ("Pingu", "Squawk! Waddle waddle!")
@@ -1580,7 +1580,7 @@ class DeskPet:
                     console.print("5. 🌟 Cosmic Star-Candy  - Cost: 50 Coins | Hunger: -40, Happiness: +60, Energy: +30, XP: +120")
                     console.print("6. Cancel feeding")
                     
-                    choice = console.input("\n[cyan]What would you like to feed Kepler? (1-6): [/cyan]").strip()
+                    choice = console.input(f"\n[cyan]What would you like to feed {self.pet_name}? (1-6): [/cyan]").strip()
                     if choice == "1":
                         food_name = "Standard Cookie 🍪"
                         cost = 0
@@ -2030,14 +2030,14 @@ class DeskPet:
                             time.sleep(0.1)
                         self.hub.stop_motor()
                         self.gain_xp(35)
-                        self.add_log(f"[Background Game] 🎉 You won Hide & Seek! Kepler gained +35 XP!")
+                        self.add_log(f"[Background Game] 🎉 You won Hide & Seek! {self.pet_name} gained +35 XP!")
                     else:
                         self.hub.set_led("red")
                         self.hub.beep(200, 500)
                         self.add_log(f"[Background Game] 😿 Time's up! Hide & Seek failed.")
                         
                 elif game_id == "tail_counter":
-                    self.add_log("[Background Game] INSTRUCTIONS: Watch Kepler wag his tail. Count the wags, then wave your hand under the distance sensor exactly that many times to answer!")
+                    self.add_log(f"[Background Game] INSTRUCTIONS: Watch {self.pet_name} wag his tail. Count the wags, then wave your hand under the distance sensor exactly that many times to answer!")
                     secret_count = random.randint(1, 4)
                     self.hub.set_led("purple")
                     self.hub.beep(600, 150)
@@ -2077,14 +2077,14 @@ class DeskPet:
                             self.hub.beep(900, 100)
                             time.sleep(0.1)
                         self.gain_xp(30)
-                        self.add_log(f"[Background Game] 🎉 Correct! Kepler counted {secret_count} wags. +30 XP!")
+                        self.add_log(f"[Background Game] 🎉 Correct! {self.pet_name} counted {secret_count} wags. +30 XP!")
                     else:
                         self.hub.set_led("red")
                         self.hub.beep(200, 500)
-                        self.add_log(f"[Background Game] 😿 Wrong count! Kepler counted {secret_count}, you petted {user_count}.")
+                        self.add_log(f"[Background Game] 😿 Wrong count! {self.pet_name} counted {secret_count}, you petted {user_count}.")
                         
                 elif game_id == "tug_of_war":
-                    self.add_log("[Background Game] INSTRUCTIONS: Kepler's motor is pulling! Tilt the Smart Hub Left and Right repeatedly 12 times within 12 seconds to pull back!")
+                    self.add_log(f"[Background Game] INSTRUCTIONS: {self.pet_name}'s motor is pulling! Tilt the Smart Hub Left and Right repeatedly 12 times within 12 seconds to pull back!")
                     self.hub.set_led("cyan")
                     self.hub.beep(700, 150)
                     time.sleep(0.5)
@@ -2116,7 +2116,7 @@ class DeskPet:
                     else:
                         self.hub.set_led("red")
                         self.hub.beep(250, 450)
-                        self.add_log(f"[Background Game] 😿 Kepler won the Tug-of-War.")
+                        self.add_log(f"[Background Game] 😿 {self.pet_name} won the Tug-of-War.")
                         
                 elif game_id == "simon_tilt":
                     self.add_log("[Background Game] INSTRUCTIONS: Watch the LED/sound sequence: Blue=Left, Orange=Right, Green=Forward, Red=Backward. Tilt the Smart Hub in the exact same sequence to answer!")
@@ -2198,7 +2198,7 @@ class DeskPet:
                             
                     self.hub.set_led("green")
                     self.gain_xp(20)
-                    self.add_log(f"[Background Game] 🎉 DJ Session complete! Kepler gained +20 XP!")
+                    self.add_log(f"[Background Game] 🎉 DJ Session complete! {self.pet_name} gained +20 XP!")
             except Exception as e:
                 self.add_log(f"[Background Game Error] {e}")
             finally:
@@ -2308,7 +2308,7 @@ class DeskPet:
             # Squirrel Alert Easter Egg (Press button while covering proximity <= 2cm)
             btn = self.hub.button_state
             if btn == 1 and dist <= 2 and not self.screaming_for_food:
-                self.add_log("[EASTER EGG] 🐿️ SQUIRREL ALERT! Kepler spotted a squirrel! Frantic shaking initiated! 🐿️")
+                self.add_log(f"[EASTER EGG] 🐿️ SQUIRREL ALERT! {self.pet_name} spotted a squirrel! Frantic shaking initiated! 🐿️")
                 self.gain_xp(50)
                 
                 def run_squirrel_alert():
@@ -3308,7 +3308,7 @@ def show_3d_network_visualizer(pet):
             
             likes_dislikes = [
                 "[bold #00E676]❤ LIKES & INTERESTS:[/bold #00E676]",
-                " • Petting Kepler (+20 XP, increases Joy)",
+                f" • Petting {self.pet_name} (+20 XP, increases Joy)",
                 " • Tasty Snacks (Chewing loops, Hunger -30)",
                 " • Minigames (Tug of War, Dj, Hide & Seek)",
                 " • Positive reinforcement training feedback",
@@ -3340,7 +3340,7 @@ def show_network_visualization(pet):
     intro_lines = [
         "=== 🧠 SmallBrain™ Synaptic Network Visualizer ===",
         "This real-time visualization displays current layer activations, synaptic connection weights,",
-        "and action selection values generated by Kepler's local feedforward brain.",
+        f"and action selection values generated by {pet.pet_name}'s local feedforward brain.",
         ""
     ]
     
@@ -3441,7 +3441,7 @@ def select_or_create_pet(pet_name=None):
         files = [f for f in os.listdir(dir_path) if f.endswith(".json")]
         if not files:
             return {
-                "pet_name": "Kepler",
+                "pet_name": "Bob",
                 "profile": "Puppy",
                 "level": 1,
                 "xp": 0,
@@ -3506,7 +3506,7 @@ def create_new_pet_flow():
     
     # Default names
     default_names = {
-        "Puppy": "Kepler",
+        "Puppy": "Bob",
         "Kitten": "Luna",
         "Robot": "RoboPet",
         "Penguin": "Pingu"
@@ -3776,7 +3776,7 @@ def run_interactive_tutorial(pet):
         console.clear()
         console.print("=== 🎓 Interactive WeDo Desk Pet Tutorial ===\n", style="bold green")
         console.print("[yellow]Step 1: Direct Petting Challenge[/yellow]")
-        console.print("Put your hand or an object within [bold cyan]6cm[/bold cyan] of the Distance Sensor to pet Kepler.")
+        console.print(f"Put your hand or an object within [bold cyan]6cm[/bold cyan] of the Distance Sensor to pet {pet.pet_name}.")
         console.print("Waiting for sensor input (15s timeout)...")
         
         start_t = time.time()
@@ -3792,7 +3792,7 @@ def run_interactive_tutorial(pet):
             time.sleep(0.1)
             
         if pet_detected:
-            console.print("\n[green]Success! Petting detected! Kepler chirped happily.[/green]\n")
+            console.print(f"\n[green]Success! Petting detected! {pet.pet_name} chirped happily.[/green]\n")
             pet.interact_pet()
         else:
             console.print("\n[red]Timeout: No petting detected.[/red]\n")
@@ -3825,7 +3825,7 @@ def run_interactive_tutorial(pet):
             time.sleep(0.1)
             
         if tilt_detected:
-            console.print(f"\n[green]Success! Tilt '{tilt}' detected. Kepler is now dizzy! (@_@)[/green]\n")
+            console.print(f"\n[green]Success! Tilt '{tilt}' detected. {pet.pet_name} is now dizzy! (@_@)[/green]\n")
             for _ in range(4):
                 try:
                     pet.hub.beep(400, 100)
@@ -3874,7 +3874,7 @@ def run_interactive_tutorial(pet):
     finally:
         set_terminal_raw(False)
         
-    console.print("\n[green]Great job! You finished the interactive tutorial. Kepler is fully trained![/green]")
+    console.print(f"\n[green]Great job! You finished the interactive tutorial. {pet.pet_name} is fully trained![/green]")
     try:
         console.input("\nPress Enter to return...")
     except (KeyboardInterrupt, EOFError):
@@ -3884,9 +3884,9 @@ def run_interactive_tutorial(pet):
 def run_hide_and_seek_game(pet):
     console.clear()
     console.print("=== 🙈 WeDo Hide & Seek (Proximity Hot & Cold) 🙈 ===\n", style="bold cyan")
-    console.print("Instructions: Kepler will think of a secret target distance (between 2 and 8 cm).")
+    console.print(f"Instructions: {pet.pet_name} will think of a secret target distance (between 2 and 8 cm).")
     console.print("Move your hand closer or further from the Distance Sensor to find the spot.")
-    console.print("Kepler's LED and beep pitch will tell you if you are Hot or Cold:")
+    console.print(f"{pet.pet_name}'s LED and beep pitch will tell you if you are Hot or Cold:")
     console.print("  🔴 Red / Low Pitch  = Cold (Far from target)")
     console.print("  🟡 Yellow / Medium  = Warm (Getting closer)")
     console.print("  🟢 Green / High     = Hot! (Very close / On Target!)")
@@ -3901,7 +3901,7 @@ def run_hide_and_seek_game(pet):
         while round_num <= rounds_to_win:
             import random
             target = random.randint(2, 8)
-            console.print(f"\n[bold yellow]Round {round_num} of {rounds_to_win}: Kepler is hiding a secret distance...[/bold yellow]")
+            console.print(f"\n[bold yellow]Round {round_num} of {rounds_to_win}: {pet.pet_name} is hiding a secret distance...[/bold yellow]")
             time.sleep(1.0)
             
             consecutive_matches = 0
@@ -4065,7 +4065,7 @@ def run_speed_petting_game(pet):
 def run_rhythm_matcher_game(pet):
     console.clear()
     console.print("=== 🥁 Tail-Wag Rhythm Matcher 🥁 ===\n", style="bold cyan")
-    console.print("Instructions: Kepler will wag its tail and beep in a rhythm.")
+    console.print(f"Instructions: {pet.pet_name} will wag its tail and beep in a rhythm.")
     console.print("You must tap the [bold green]Enter[/bold green] key to match that exact rhythm!")
     console.input("\nPress Enter to start Round 1...")
     
@@ -4083,7 +4083,7 @@ def run_rhythm_matcher_game(pet):
             ]
             pattern = random.choice(patterns)
             
-            console.print(f"\n[bold yellow]Round {round_num}: Listen and watch Kepler's rhythm...[/bold yellow]")
+            console.print(f"\n[bold yellow]Round {round_num}: Listen and watch {pet.pet_name}'s rhythm...[/bold yellow]")
             time.sleep(1.0)
             
             timestamps = []
@@ -4135,7 +4135,7 @@ def run_rhythm_matcher_game(pet):
                 console.print(f"[bold]Beat Match Accuracy: {accuracy}%[/bold]")
                 
                 if accuracy >= 70:
-                    console.print("[green]Awesome! You matched the rhythm! Kepler is dancing![/green]")
+                    console.print(f"[green]Awesome! You matched the rhythm! {pet.pet_name} is dancing![/green]")
                     try:
                         pet.hub.set_led("green")
                         for _ in range(2):
@@ -4174,7 +4174,7 @@ def run_rhythm_matcher_game(pet):
 def run_balance_tail_game(pet):
     console.clear()
     console.print("=== ⚖️ Balance the Tail (Tilt Control) ⚖️ ===\n", style="bold cyan")
-    console.print("Instructions: Kepler's tail will drift left or right.")
+    console.print(f"Instructions: {pet.pet_name}'s tail will drift left or right.")
     console.print("Tilt the Smart Hub (Tilt Sensor) in the [bold yellow]opposite[/bold yellow] direction to balance it!")
     console.print("Keep the tail balanced in the center zone for 15 seconds to win!")
     console.input("\nPress Enter to start balancing...")
@@ -4238,7 +4238,7 @@ def run_balance_tail_game(pet):
         
     success = (score >= 45)
     if success:
-        console.print("\n\n[bold green]🎉 Great job! The tail stayed perfectly balanced! Kepler is happy![/bold green]")
+        console.print(f"\n\n[bold green]🎉 Great job! The tail stayed perfectly balanced! {pet.pet_name} is happy![/bold green]")
         pet.gain_xp(40)
     else:
         console.print("\n\n[red]Oops! The tail drifted too far. Try again to balance it![/red]")
@@ -4252,7 +4252,7 @@ def run_balance_tail_game(pet):
 def run_sound_memory_game(pet):
     console.clear()
     console.print("=== 🎵 Sound Pitch Memory Matcher 🎵 ===\n", style="bold cyan")
-    console.print("Instructions: Kepler will play a sequence of different musical beeps.")
+    console.print(f"Instructions: {pet.pet_name} will play a sequence of different musical beeps.")
     console.print("Listen carefully to the pitches (1 = Low, 2 = Medium, 3 = High).")
     console.print("You must select the correct sequence from the choices presented!")
     console.input("\nPress Enter to start Round 1...")
@@ -4334,10 +4334,10 @@ def run_sound_memory_game(pet):
 def run_code_breaker_game(pet):
     console.clear()
     console.print("=== 🔐 Pet Code Breaker (Pattern Lock) 🔐 ===\n", style="bold cyan")
-    console.print("Instructions: Kepler has locked his treat box with a secret 3-input code.")
+    console.print(f"Instructions: {pet.pet_name} has locked his treat box with a secret 3-input code.")
     console.print("The code consists of 3 actions in sequence. Actions are:")
     console.print("  P = Wave Hand (< 6cm) | L = Tilt Hub Left | R = Tilt Hub Right")
-    console.print("Kepler will flash [bold yellow]Yellow[/bold yellow] for correct parts, and [bold red]Red[/bold red] if any part is wrong.")
+    console.print(f"{pet.pet_name} will flash [bold yellow]Yellow[/bold yellow] for correct parts, and [bold red]Red[/bold red] if any part is wrong.")
     console.print("Passcode deducing limit: 5 attempts total!")
     console.input("\nPress Enter to begin cracking...")
     
@@ -4399,7 +4399,7 @@ def run_code_breaker_game(pet):
                     pass
                 
         if solved:
-            console.print("\n[bold green]🔑 Code Cracked! Access Granted! Treat box unlocked! Kepler wags his tail! 🔑[/bold green]")
+            console.print(f"\n[bold green]🔑 Code Cracked! Access Granted! Treat box unlocked! {pet.pet_name} wags his tail! 🔑[/bold green]")
             try:
                 pet.hub.set_led("green")
                 for _ in range(4):
@@ -4434,7 +4434,7 @@ def run_code_breaker_game(pet):
 def run_tail_snatcher_game(pet):
     console.clear()
     console.print("=== ⚡ Reaction Time Test: Tail Snatcher ⚡ ===\n", style="bold cyan")
-    console.print("Instructions: Kepler's tail will wag back and forth.")
+    console.print(f"Instructions: {pet.pet_name}'s tail will wag back and forth.")
     console.print("Watch carefully! As soon as the tail stops and flashes [bold purple]Purple[/bold purple],")
     console.print("place your hand rapidly in front of the Distance Sensor (< 6cm)!")
     console.input("\nPress Enter to begin...")
@@ -4524,7 +4524,7 @@ def run_tail_snatcher_game(pet):
 def run_sound_dj_game(pet):
     console.clear()
     console.print("=== 🎧 Sound DJ: Interactive Theremin 🎧 ===\n", style="bold cyan")
-    console.print("Instructions: Kepler turns into a musical instrument!")
+    console.print(f"Instructions: {pet.pet_name} turns into a musical instrument!")
     console.print("Move your hand closer or further from the Distance Sensor to control tone pitch.")
     console.print("  Closer (< 3cm) = High Pitch note")
     console.print("  Further (> 8cm) = Low Pitch note")
@@ -4649,7 +4649,7 @@ def run_tilt_maze_game(pet):
                 
         elapsed = time.time() - start_t
         console.clear()
-        console.print("[bold green]🏆 Exit Reached! Maze Solved! Kepler celebrates! 🏆[/bold green]")
+        console.print(f"[bold green]🏆 Exit Reached! Maze Solved! {pet.pet_name} celebrates! 🏆[/bold green]")
         try:
             pet.hub.set_led("green")
             for _ in range(3):
@@ -4682,10 +4682,10 @@ def run_tilt_maze_game(pet):
 def run_keep_away_game(pet):
     console.clear()
     console.print("=== 🛡️ Keep-Away (Avoidance Challenge) 🛡️ ===\n", style="bold cyan")
-    console.print("Instructions: Kepler will sweep its tail left and right.")
+    console.print(f"Instructions: {pet.pet_name} will sweep its tail left and right.")
     console.print("Keep your hand at a safe range of [bold green]8 cm[/bold green] from the Distance Sensor.")
     console.print("If your hand gets too close (< 5cm) or too far, you lose points!")
-    console.print("Avoid Kepler's tail sweeps for 10 seconds!")
+    console.print(f"Avoid {pet.pet_name}'s tail sweeps for 10 seconds!")
     console.input("\nPress Enter to start...")
     
     score = 100
@@ -4751,7 +4751,7 @@ def run_keep_away_game(pet):
 def run_simon_says_tilt_game(pet):
     console.clear()
     console.print("=== 📐 Simon Says: Tilt Version 📐 ===\n", style="bold cyan")
-    console.print("Instructions: Kepler will prompt you with a sequence of tilts.")
+    console.print(f"Instructions: {pet.pet_name} will prompt you with a sequence of tilts.")
     console.print("Tilt the Smart Hub (Tilt Sensor) in that exact sequence to win!")
     console.print("Directions: L = Left | R = Right | F = Forward | B = Backward")
     console.input("\nPress Enter to start Round 1...")
@@ -4771,7 +4771,7 @@ def run_simon_says_tilt_game(pet):
             time.sleep(1.0)
             
             for direction in seq:
-                console.print(f"Kepler tilts: [bold cyan]{direction}[/bold cyan]")
+                console.print(f"{pet.pet_name} tilts: [bold cyan]{direction}[/bold cyan]")
                 try:
                     pet.hub.set_led(led_colors[direction])
                     pet.hub.beep(beep_freqs[direction], 400)
@@ -4808,7 +4808,7 @@ def run_simon_says_tilt_game(pet):
                 time.sleep(0.8)
                 
             if user_seq == seq:
-                console.print("[green]Correct! Kepler wags his tail in joy![/green]")
+                console.print(f"[green]Correct! {pet.pet_name} wags his tail in joy![/green]")
                 try:
                     pet.hub.set_led("green")
                     pet.hub.set_motor(50)
@@ -4842,9 +4842,9 @@ def run_simon_says_tilt_game(pet):
 def run_simon_says_game(pet):
     console.clear()
     console.print("=== 🔴 Simon Says Color Game 🟢 ===\n", style="bold cyan")
-    console.print("Kepler will show you a sequence of LED colors (Red, Green, Blue).")
+    console.print(f"{pet.pet_name} will show you a sequence of LED colors (Red, Green, Blue).")
     console.print("You must memorize the sequence and type the colors in order (e.g. 'rgb' or 'gbr').")
-    console.print("Each correct sequence gains Kepler +20 XP!")
+    console.print(f"Each correct sequence gains {pet.pet_name} +20 XP!")
     console.input("\nPress Enter to begin Round 1...")
     
     colors_map = {
@@ -4859,7 +4859,7 @@ def run_simon_says_game(pet):
         import random
         seq = [random.choice(["r", "g", "b"]) for _ in range(round_num + 1)]
         
-        console.print(f"\n[yellow]Round {round_num}: Watch Kepler's LED light...[/yellow]")
+        console.print(f"\n[yellow]Round {round_num}: Watch {pet.pet_name}'s LED light...[/yellow]")
         time.sleep(1.0)
         
         for char in seq:
