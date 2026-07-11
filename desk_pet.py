@@ -540,7 +540,14 @@ class RealWeDo2Hub:
                     self.sensor_cache[port]["times"] = data[0] if len(data) > 0 else 0
                     device = self.port_data[port - 1] if port <= len(self.port_data) else None
                     if device == "Distance Sensor":
-                        self.sensor_cache[port]["distance"] = DISTANCE_LOOKUP.get(val_hex, 0)
+                        raw_dist = DISTANCE_LOOKUP.get(val_hex, 0)
+                        history = self.sensor_cache[port].setdefault("history", [])
+                        history.append(raw_dist)
+                        if len(history) > 3:
+                            history.pop(0)
+                        sorted_hist = sorted(history)
+                        median_val = sorted_hist[len(sorted_hist) // 2]
+                        self.sensor_cache[port]["distance"] = median_val
                     elif device == "Tilt Sensor":
                         self.sensor_cache[port]["tilt"] = TILT_LOOKUP.get(val_hex, "Unknown")
         except Exception:
