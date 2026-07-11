@@ -34,6 +34,91 @@ try:
 except ImportError:
     robot_midi = None
 
+import math
+
+class SmallBrainNN:
+    def __init__(self):
+        # 12 inputs -> 8 hidden -> 7 outputs
+        self.input_size = 12
+        self.hidden_size = 8
+        self.output_size = 7
+        
+        # Xavier/Glorot initialization
+        self.W1 = [[random.uniform(-1.0, 1.0) * math.sqrt(2.0/self.input_size) 
+                    for _ in range(self.hidden_size)] for _ in range(self.input_size)]
+        self.b1 = [0.0] * self.hidden_size
+        
+        self.W2 = [[random.uniform(-1.0, 1.0) * math.sqrt(2.0/self.hidden_size) 
+                    for _ in range(self.output_size)] for _ in range(self.hidden_size)]
+        self.b2 = [0.0] * self.output_size
+
+    def sigmoid(self, x):
+        return 1.0 / (1.0 + math.exp(-max(-20.0, min(20.0, x))))
+
+    def softmax(self, arr):
+        max_val = max(arr)
+        exps = [math.exp(x - max_val) for x in arr]
+        sum_exps = sum(exps)
+        return [x / sum_exps for x in exps]
+
+    def forward(self, X):
+        self.h = [0.0] * self.hidden_size
+        for j in range(self.hidden_size):
+            val = sum(X[i] * self.W1[i][j] for i in range(self.input_size)) + self.b1[j]
+            self.h[j] = self.sigmoid(val)
+            
+        out = [0.0] * self.output_size
+        for j in range(self.output_size):
+            val = sum(self.h[i] * self.W2[i][j] for i in range(self.hidden_size)) + self.b2[j]
+            out[j] = val
+            
+        return self.softmax(out)
+
+    def train(self, dataset, epochs=500, lr=0.1):
+        for _ in range(epochs):
+            for X, target in dataset:
+                outputs = self.forward(X)
+                d_out = [outputs[i] - target[i] for i in range(self.output_size)]
+                
+                d_hidden = [0.0] * self.hidden_size
+                for i in range(self.hidden_size):
+                    error = sum(d_out[j] * self.W2[i][j] for j in range(self.output_size))
+                    d_hidden[i] = error * self.h[i] * (1.0 - self.h[i])
+                    
+                for i in range(self.hidden_size):
+                    for j in range(self.output_size):
+                        self.W2[i][j] -= lr * self.h[i] * d_out[j]
+                for j in range(self.output_size):
+                    self.b2[j] -= lr * d_out[j]
+                    
+                for i in range(self.input_size):
+                    for j in range(self.hidden_size):
+                        self.W1[i][j] -= lr * X[i] * d_hidden[j]
+                for j in range(self.hidden_size):
+                    self.b1[j] -= lr * d_hidden[j]
+
+def train_default_brain():
+    brain = SmallBrainNN()
+    dataset = [
+        ([1, 0, 0, 0, 0, 0,  1.0, 0,  0.5, 0.5, 0.8, 1.0], [0, 0, 0, 0, 0, 1, 0]),
+        ([1, 0, 0, 0, 0, 0,  0.5, 0,  0.2, 0.3, 0.9, 1.0], [0, 0, 0, 0, 0, 1, 0]),
+        ([0, 1, 0, 0, 0, 0,  0.1, 0,  0.8, 0.8, 0.2, 1.0], [1, 0, 0, 0, 0, 0, 0]),
+        ([0, 1, 0, 0, 0, 0,  1.0, 0,  0.9, 0.9, 0.2, 1.0], [1, 0, 0, 0, 0, 0, 0]),
+        ([0, 0, 1, 0, 0, 0,  1.0, 0,  0.5, 0.2, 0.3, 1.0], [0, 1, 0, 0, 0, 0, 0]),
+        ([0, 0, 1, 0, 0, 0,  0.8, 0,  0.6, 0.3, 0.4, 0.8], [0, 1, 0, 0, 0, 0, 0]),
+        ([0, 0, 0, 1, 0, 0,  1.0, 0,  0.8, 0.8, 0.2, 1.0], [0, 0, 1, 0, 0, 0, 0]),
+        ([0, 0, 0, 1, 0, 0,  1.0, 0,  0.6, 0.7, 0.3, 1.0], [0, 0, 1, 0, 0, 0, 0]),
+        ([0, 0, 0, 0, 1, 0,  1.0, 0,  0.1, 0.2, 0.2, 1.0], [0, 0, 0, 1, 0, 0, 0]),
+        ([0, 0, 0, 0, 0, 0,  1.0, 0,  0.05, 0.1, 0.3, 1.0], [0, 0, 0, 1, 0, 0, 0]),
+        ([0, 0, 0, 0, 0, 0,  1.0, 1,  0.7, 0.7, 0.3, 1.0], [0, 0, 0, 0, 1, 0, 0]),
+        ([0, 0, 0, 0, 0, 1,  1.0, 1,  0.8, 0.5, 0.4, 1.0], [0, 0, 0, 0, 1, 0, 0]),
+        ([0, 0, 0, 0, 0, 0,  1.0, 0,  0.8, 0.8, 0.2, 1.0], [0, 0, 0, 0, 0, 0, 1]),
+        ([0, 0, 0, 0, 0, 0,  1.0, 0,  0.5, 0.5, 0.5, 1.0], [0, 0, 0, 0, 0, 0, 1]),
+    ]
+    brain.train(dataset, epochs=500, lr=0.15)
+    return brain
+
+
 # Import rich library components
 try:
     from rich.console import Console
@@ -463,7 +548,11 @@ class DeskPet:
         self.trainer_hp = state_dict.get("trainer_hp", 100)
         self.sleep_cover_start = 0.0
 
+        # Local Neural Network brain
+        self.local_brain_nn = train_default_brain()
+
         self.add_log(f"Pet {self.pet_name} initialized. Welcome!")
+
 
         # Start autonomous behavior thread
         self.brain_thread = threading.Thread(target=self._brain_loop, daemon=True)
@@ -647,7 +736,102 @@ class DeskPet:
                 return json.loads(content)
         except Exception as e:
             self.add_log(f"[AI Connect Error] {e}")
-            return None
+            self.add_log("[Local Brain] Redirecting query to local Neural Network companion brain...")
+            return self.query_local_brain_nn(prompt)
+
+    def query_local_brain_nn(self, prompt):
+        p = str(prompt).lower()
+        
+        # Build 12 inputs: [feed, pet, poke, sing, sleep, play, dist_val, tilt_val, energy, happiness, hunger, hp]
+        feed = 1 if any(w in p for w in ["feed", "food", "cookie", "hungry", "eat", "fish"]) else 0
+        pet = 1 if any(w in p for w in ["pet", "scratch", "love", "cuddle", "hug", "happy", "cute"]) else 0
+        poke = 1 if any(w in p for w in ["poke", "hit", "hurt", "kick", "angry", "punch", "slap"]) else 0
+        sing = 1 if any(w in p for w in ["sing", "song", "music", "melody", "sound", "tune"]) else 0
+        sleep = 1 if any(w in p for w in ["sleep", "dream", "bed", "night", "rest", "tired"]) else 0
+        play = 1 if any(w in p for w in ["play", "game", "dance", "jump", "walk"]) else 0
+        
+        # Get sensor inputs
+        dist_val = 1.0
+        dist_port = self.hub.check_connected("Distance Sensor")
+        if dist_port:
+            dist_val = self.hub.sensor_cache[dist_port]["distance"] / 10.0
+            
+        tilt_val = 0
+        tilt_port = self.hub.check_connected("Tilt Sensor")
+        if tilt_port:
+            t = self.hub.sensor_cache[tilt_port]["tilt"]
+            if t != "Neutral" and t != "Unknown":
+                tilt_val = 1
+                
+        # Forward pass on small brain
+        inputs = [
+            feed, pet, poke, sing, sleep, play,
+            dist_val, float(tilt_val),
+            self.energy / 100.0,
+            self.happiness / 100.0,
+            self.hunger / 100.0,
+            self.trainer_hp / 100.0
+        ]
+        
+        outputs = self.local_brain_nn.forward(inputs)
+        best_idx = outputs.index(max(outputs))
+        
+        profile_responses = {
+            "Puppy": {
+                0: ("Happy!", "Woof woof! Happy tail wagging!", "happy", "green", [[800, 100], [1000, 150]], 40, 200),
+                1: ("Angry!", "Grrr! Snarl peevishly!", "angry", "red", [[150, 200], [100, 250]], 80, 200),
+                2: ("Singing", "Awoo! Puppy howl melody! ♪", "singing", "purple", [[400, 200], [500, 200], [600, 300]], 0, 0),
+                3: ("Sleeping", "Yawn.. Zzz.. Dreaming of bones.", "sleeping", "blue", [[300, 400]], 0, 0),
+                4: ("Dizzy", "Woof.. The floor is spinning!", "dizzy", "yellow", [[200, 150], [150, 150]], 0, 0),
+                5: ("Eating", "Munch munch! Delicious cookie!", "eating", "green", [[600, 100], [900, 200]], 30, 200),
+                6: ("Waiting", "Woof? (Waiting for you)", "awake", "green", [], 0, 0)
+            },
+            "Kitten": {
+                0: ("Happy!", "Meow! Purr purr...", "happy", "green", [[900, 100], [1100, 150]], 30, 150),
+                1: ("Angry!", "Hiss! Kitten claws out!", "angry", "red", [[180, 200], [120, 250]], 90, 250),
+                2: ("Singing", "Meow meow, cute notes! ♪", "singing", "purple", [[450, 200], [550, 200], [650, 300]], 0, 0),
+                3: ("Sleeping", "Prr.. Zzz.. Nap time.", "sleeping", "blue", [[350, 400]], 0, 0),
+                4: ("Dizzy", "Meow.. spinning world!", "dizzy", "yellow", [[220, 150], [170, 150]], 0, 0),
+                5: ("Eating", "Chomp chomp! Tasty fish treats!", "eating", "green", [[650, 100], [950, 200]], 25, 150),
+                6: ("Waiting", "Meow? (Blinking at you)", "awake", "green", [], 0, 0)
+            },
+            "Robot": {
+                0: ("Happy!", "BIP BOOP! System happy!", "happy", "green", [[1000, 100], [1200, 150]], 50, 300),
+                1: ("Angry!", "ERROR! System overload!", "angry", "red", [[200, 200], [150, 250]], 100, 300),
+                2: ("Singing", "Beep chime, retro wave! ♪", "singing", "purple", [[500, 200], [600, 200], [700, 300]], 0, 0),
+                3: ("Sleeping", "HALT.. Power down.. Zzz.", "sleeping", "blue", [[400, 400]], 0, 0),
+                4: ("Dizzy", "GYRO ERROR! Unstable axis!", "dizzy", "yellow", [[250, 150], [200, 150]], 0, 0),
+                5: ("Eating", "CRUNCH! Recharging cells!", "eating", "green", [[700, 100], [1000, 200]], 40, 300),
+                6: ("Waiting", "SYS IDLE (Waiting inputs)", "awake", "green", [], 0, 0)
+            },
+            "Penguin": {
+                0: ("Happy!", "Squawk! Waddle waddle happy!", "happy", "green", [[850, 100], [1050, 150]], 45, 180),
+                1: ("Angry!", "Peck peck! Annoyed squawk!", "angry", "red", [[160, 200], [110, 250]], 85, 180),
+                2: ("Singing", "Honk honk, penguin tunes! ♪", "singing", "purple", [[420, 200], [520, 200], [620, 300]], 0, 0),
+                3: ("Sleeping", "Zzz.. Dreaming of cold ice.", "sleeping", "blue", [[320, 400]], 0, 0),
+                4: ("Dizzy", "Squawk.. The glacier is spinning!", "dizzy", "yellow", [[210, 150], [160, 150]], 0, 0),
+                5: ("Eating", "Yum! Chasing fish! Chomp!", "eating", "green", [[620, 100], [920, 200]], 35, 180),
+                6: ("Waiting", "Squawk? (Looking around)", "awake", "green", [], 0, 0)
+            }
+        }
+        
+        resp_dict = profile_responses.get(self.profile, profile_responses["Puppy"])
+        thought, speech, emotion, color, sound, motor_speed, motor_duration = resp_dict[best_idx]
+        
+        response = {
+            "thought": f"LocalNN: {thought}",
+            "speech": speech,
+            "emotion": emotion,
+            "color": color,
+            "sound": sound,
+            "motor_speed": motor_speed,
+            "motor_duration_ms": motor_duration,
+            "prank_rickroll": False,
+            "write_soul": None,
+            "vm_code": None
+        }
+        return response
+
 
     def execute_llm_code(self, code):
         import io
