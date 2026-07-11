@@ -551,22 +551,50 @@ class DeskPet:
     # -------------------------------------------------------------
     # Ollama AI Autopilot & Chat Integration
     # -------------------------------------------------------------
+    def get_soul_file_path(self):
+        return os.path.expanduser("~/.wedo_pet_soul.txt")
+
+    def ensure_soul_file(self):
+        path = self.get_soul_file_path()
+        if not os.path.exists(path):
+            try:
+                default_soul = (
+                    f"You are the personality and soul of {self.pet_name}, a loyal, playful, and friendly robot companion. "
+                    "You love eating cookies, playing synthesized MIDI songs, and wagging your motor-controlled physical tail. "
+                    "You react to distance and tilt changes. You learn and adapt to how the user treats you."
+                )
+                with open(path, "w") as f:
+                    f.write(default_soul)
+            except Exception as e:
+                self.add_log(f"Error creating default soul file: {e}")
+
     def query_ollama(self, prompt):
         import urllib.request
         
+        self.ensure_soul_file()
+        soul_content = "You are a friendly robotic companion."
+        try:
+            with open(self.get_soul_file_path(), "r") as f:
+                soul_content = f.read().strip()
+        except Exception as e:
+            self.add_log(f"Error reading soul file: {e}")
+
         url = "http://localhost:11434/api/generate"
         system_rules = (
             "You are the brain of an interactive desk pet robot built with LEGO WeDo 2.0.\n"
             f"Your name is {self.pet_name} and you are a {self.profile}.\n"
-            "You respond to user chat messages or sensor events. You must respond ONLY with a valid JSON object matching exactly this schema:\n"
+            f"Personality/Soul Context:\n{soul_content}\n\n"
+            "You respond to user chat messages, sensor events, dreaming logs, or idle thoughts. "
+            "You must respond ONLY with a valid JSON object matching exactly this schema:\n"
             "{\n"
             "  \"thought\": \"Brief internal thought (max 10 words)\",\n"
-            "  \"speech\": \"Cute sound words or conversational response (max 40 words)\",\n"
+            "  \"speech\": \"Cute sound words or conversational response (max 40 words). Set to null if you decide to wait/do nothing.\",\n"
             "  \"emotion\": \"awake|sleeping|happy|angry|dizzy|eating|singing\",\n"
             "  \"color\": \"red|green|blue|yellow|purple|cyan|white|off\",\n"
             "  \"sound\": [[frequency_hz, duration_ms], ...],\n"
             "  \"motor_speed\": -100 to 100,\n"
             "  \"motor_duration_ms\": 0 to 2000,\n"
+            "  \"write_soul\": \"Optional updated personality/memories/learned beliefs to overwrite your current soul description. Set to null if no changes needed.\",\n"
             "  \"vm_code\": \"Optional valid Python code block to execute manually if you want complex movements. Otherwise leave null.\"\n"
             "}\n"
             "Available API in vm_code:\n"
@@ -674,16 +702,31 @@ class DeskPet:
             return
             
         thought = response.get("thought", "Calculating...")
-        speech = response.get("speech", "Beep boop!")
+        speech = response.get("speech")
         emotion = response.get("emotion", "awake")
         color = response.get("color", "green")
         sound = response.get("sound", [])
         motor_speed = response.get("motor_speed", 0)
         motor_duration = response.get("motor_duration_ms", 0)
         vm_code = response.get("vm_code")
+        write_soul = response.get("write_soul")
         
         self.mood = emotion
-        self.add_log(f"[Brain: {thought}] \"{speech}\"")
+        
+        # If speech is null, the AI decided to wait/remain silent
+        if speech is not None and str(speech).strip().lower() != "null" and str(speech).strip() != "":
+            self.add_log(f"[Brain: {thought}] \"{speech}\"")
+        else:
+            self.add_log(f"[Brain: {thought}] (Waiting...)")
+            
+        # Update Soul File if LLM commands a rewrite
+        if write_soul is not None and str(write_soul).strip().lower() != "null" and str(write_soul).strip() != "":
+            try:
+                with open(self.get_soul_file_path(), "w") as f:
+                    f.write(str(write_soul).strip())
+                self.add_log(f"[Soul Update] Personality modified: {write_soul}")
+            except Exception as e:
+                self.add_log(f"Error saving updated soul: {e}")
         
         # LED Color
         try:
@@ -716,6 +759,7 @@ class DeskPet:
         # Optional custom synthesized guest Python script
         if vm_code:
             threading.Thread(target=self.execute_llm_code, args=(vm_code,), daemon=True).start()
+
 
     def change_profile(self, name):
         profiles = {
@@ -958,7 +1002,7 @@ class DeskPet:
         last_sensor_check = time.time()
         last_activity_time = time.time()
         
-        # Keep track of distance readings to detect hand-waving "petting" movement
+        # Keep track of distances
         recent_distances = []
         last_tilt = "Neutral"
 
@@ -980,10 +1024,10 @@ class DeskPet:
                 
             current_time = time.time()
             
-            # Check for AI Autopilot sensor events
+            # Check for AI Autopilot sensor events (Active Trigger)
             if self.ai_autopilot and not self.music_playing and (current_time - self.last_ai_trigger_time > 12.0):
                 # Trigger on distance sensor change (approaching close range)
-                if dist < 5 and (not recent_distances or recent_distances[-1] >= 5):
+                if dist < 6 and (not recent_distances or recent_distances[-1] >= 6):
                     self.last_ai_trigger_time = current_time
                     self.add_log(f"[AI Autopilot] Proximity sensor triggered at {dist} cm")
                     
@@ -1002,14 +1046,57 @@ class DeskPet:
                         self.handle_ollama_response(res)
                     threading.Thread(target=run_ai_tilt, daemon=True).start()
 
+            # AI Autopilot Dreaming Loop (every 20s of sleep)
+            if self.mood == "sleeping" and self.ai_autopilot and (current_time - self.last_ai_trigger_time > 20.0):
+                self.last_ai_trigger_time = current_time
+                self.add_log(f"[Dreaming] Processing sleep sensations (Sensor reading: Distance {dist} cm, Tilt {tilt})")
+                
+                # Slow breathe LED cycle
+                def dream_breathe():
+                    for _ in range(5):
+                        try:
+                            self.hub.set_led("blue")
+                            time.sleep(1.0)
+                            self.hub.set_led("off")
+                            time.sleep(1.0)
+                        except Exception:
+                            pass
+                threading.Thread(target=dream_breathe, daemon=True).start()
+
+                def run_dreaming():
+                    res = self.query_ollama(
+                        f"Status: Sleeping. Sensors: Distance {dist} cm, Tilt {tilt}. "
+                        "You are currently dreaming. What are you dreaming about? "
+                        "Feel free to write_soul to update your personality/learned beliefs based on these sleep sensations."
+                    )
+                    self.handle_ollama_response(res)
+                threading.Thread(target=run_dreaming, daemon=True).start()
+
+            # AI Autopilot Awake Idle Loop (every 25s of silence while awake)
+            if self.mood != "sleeping" and self.ai_autopilot and (current_time - last_activity_time > 15.0) and (current_time - self.last_ai_trigger_time > 25.0):
+                self.last_ai_trigger_time = current_time
+                self.add_log("[Idle Autopilot] Thinking/waiting...")
+                
+                def run_idle():
+                    res = self.query_ollama(
+                        f"Status: Awake & Idle. Sensors: Distance {dist} cm, Tilt {tilt}. "
+                        "You are currently idle with nothing to do. What do you do? "
+                        "Feel free to beep/move, output a cute quote, or choose to wait silently by setting 'speech' to null."
+                    )
+                    self.handle_ollama_response(res)
+                threading.Thread(target=run_idle, daemon=True).start()
+
+            # Track distance history
+            recent_distances.append(dist)
+            if len(recent_distances) > 5:
+                recent_distances.pop(0)
+
             # Skip autonomous state checks if pet is currently performing a user command
             if self.mood in ["eating", "singing"] or self.music_playing:
                 last_activity_time = current_time
                 continue
-
                 
             # 1. Energy, Hunger & Happiness Drain
-            current_time = time.time()
             if current_time - last_sensor_check > 4.0:
                 last_sensor_check = current_time
                 if self.mood == "sleeping":
@@ -1049,8 +1136,8 @@ class DeskPet:
                     
             last_tilt = tilt
 
-            # 3. Distance Sensor Interactions
-            if dist < 10:
+            # 3. Distance Sensor Proximity Petting Trigger
+            if dist < 6:
                 last_activity_time = current_time
                 
                 # Check for waking up
@@ -1062,41 +1149,12 @@ class DeskPet:
                     self.hub.beep(800, 150)
                     self.hub.set_led("green")
 
-                # Accumulate recent distances to check for wave pet pattern
-                recent_distances.append(dist)
-                if len(recent_distances) > 8:
-                    recent_distances.pop(0)
+                # Treat < 6cm proximity as human petting interaction
+                self.interact_pet()
+                time.sleep(0.5)  # simple debounce
 
-                # Wave-pet detection (cycling close/far/close)
-                if len(recent_distances) >= 6:
-                    # Look for high-low-high pattern
-                    diffs = [recent_distances[i] - recent_distances[i-1] for i in range(1, len(recent_distances))]
-                    sign_changes = 0
-                    for i in range(1, len(diffs)):
-                        if (diffs[i] > 0 and diffs[i-1] < 0) or (diffs[i] < 0 and diffs[i-1] > 0):
-                            sign_changes += 1
-                    
-                    if sign_changes >= 2:
-                        # User is waving hand in front of sensor!
-                        recent_distances.clear()
-                        self.interact_pet()
-                        continue
-
-                # Angry close-proximity trigger
-                if dist <= 2:
-                    # Too close for too long
-                    if self.mood != "angry":
-                        self.mood = "angry"
-                        self.add_log(f"Too close! {self.pet_name} snaps!")
-                        self.hub.set_led("red")
-                        self.hub.beep(120, 400)
-                else:
-                    if self.mood == "angry":
-                        self.mood = "awake"
-                        self.hub.set_led("green")
-
-            # 4. Inactivity & Sleep Trigger
-            if current_time - last_activity_time > 20.0:
+            # 4. Inactivity & Sleep Trigger (fall asleep after 45s of no interactions)
+            if current_time - last_activity_time > 45.0:
                 if self.mood != "sleeping":
                     self.mood = "sleeping"
                     self.add_log(f"{self.pet_name} fell asleep... Zzz")
@@ -1105,6 +1163,7 @@ class DeskPet:
                 # Sleeping snore sound (low rumble beep) once in a while
                 if random.random() < 0.1:
                     self.hub.beep(180, 500)
+
 
 # -----------------------------------------------------------------
 # Rich Terminal Layout View Builder
