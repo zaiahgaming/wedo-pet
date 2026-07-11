@@ -820,14 +820,15 @@ class DeskPet:
             "Puppy": ("Kepler", "Woof! Play with me!"),
             "Kitten": ("Luna", "Meow.. Zzz..."),
             "Robot": ("RoboPet", "System online. Bip boop."),
-            "Dragon": ("Draco", "Roar! Feed me fire!")
+            "Penguin": ("Pingu", "Squawk! Waddle waddle!")
         }
         if name in profiles:
             self.profile = name
             self.pet_name, greeting = profiles[name]
             self.add_log(f"Profile switched to {name} ({self.pet_name}). {greeting}")
             # Quick beep to signal change
-            self.hub.beep(600 if name == "Puppy" else (800 if name == "Kitten" else (400 if name == "Robot" else 200)), 150)
+            self.hub.beep(600 if name == "Puppy" else (800 if name == "Kitten" else (400 if name == "Robot" else 900)), 150)
+
             self.save_state()
 
     def get_face(self):
@@ -891,23 +892,24 @@ class DeskPet:
             elif self.mood == "singing":
                 note = ["♪", " ♫", "  ♬", "   ♪"][sing_frame]
                 return f"[♫_♫]{note}"
-        elif self.profile == "Dragon":
+        elif self.profile == "Penguin":
             if self.mood == "sleeping":
                 zz = [" z  ", "  Z ", "   z", "    Z"][sleep_stage]
-                return f"( 🦖){zz}"
+                return f"( 🐧){zz}"
             elif self.mood == "awake":
-                return "(🦖)" if is_blink else "(🐉)"
+                return "(°🐧°)" if is_blink else "(•🐧•)"
             elif self.mood == "happy":
-                return "(🔥o🔥)" if happy_stage else "(🐲)"
+                return "(^🐧^)" if happy_stage else "(♥🐧♥)"
             elif self.mood == "angry":
-                return "(🔥_🔥)💨" if happy_stage else "(🦖)🔥"
+                return "(•🐧•)💢" if happy_stage else "(•🐧•)⚡"
             elif self.mood == "dizzy":
-                return ["(🌀_🌀)", "(🌀o🌀)", "(X_X)"][dizzy_stage]
+                return ["(🌀🐧🌀)", "(🌀o🌀)", "(X_X)"][dizzy_stage]
             elif self.mood == "eating":
-                return "(🍖)" if chew_frame else "(🦖) chom"
+                return "(🐟)" if chew_frame else "(🐧) chew"
             elif self.mood == "singing":
                 note = ["♪", " ♫", "  ♬", "   ♪"][sing_frame]
-                return f"(🐲){note}"
+                return f"(🐧){note}"
+
         return "(o_o)"
 
 
@@ -1733,11 +1735,11 @@ def handle_profile_menu(pet):
     console.print("1. Puppy (Kepler) - Friendly, mid tones")
     console.print("2. Kitten (Luna) - Quiet, high meows")
     console.print("3. Robot (RoboPet) - Retro synthesizer beeps")
-    console.print("4. Dragon (Draco) - Low rumble alerts")
+    console.print("4. Penguin (Pingu) - Squawky, waddle waddle!")
     console.print("5. Cancel")
     choice = console.input("[yellow]Select choice: [/yellow]").strip()
     
-    profiles = {"1": "Puppy", "2": "Kitten", "3": "Robot", "4": "Dragon"}
+    profiles = {"1": "Puppy", "2": "Kitten", "3": "Robot", "4": "Penguin"}
     if choice in profiles:
         pet.change_profile(profiles[choice])
     time.sleep(0.5)
@@ -1807,7 +1809,7 @@ def create_new_pet_flow():
     console.print("\n=== 🐾 Create a New WeDo 2.0 Desk Pet ===\n", style="bold cyan")
     
     # 1. Profile select
-    profiles = ["Puppy", "Kitten", "Robot", "Dragon"]
+    profiles = ["Puppy", "Kitten", "Robot", "Penguin"]
     table = Table(title="Select a Profile", show_header=False)
     for idx, p in enumerate(profiles):
         table.add_row(f"[{idx + 1}]", p)
@@ -1823,8 +1825,9 @@ def create_new_pet_flow():
         "Puppy": "Kepler",
         "Kitten": "Luna",
         "Robot": "RoboPet",
-        "Dragon": "Draco"
+        "Penguin": "Pingu"
     }
+
     
     # 2. Name select
     name = ""
