@@ -422,23 +422,23 @@ class WeDoRobotAdapter:
 # Desk Pet State Machine & Brain
 # -----------------------------------------------------------------
 class DeskPet:
-    def __init__(self, hub):
+    def __init__(self, hub, state_dict):
         self.hub = hub
         self.mood = "awake" # awake, sleeping, happy, angry, dizzy, eating, singing
         self.frame = 0
         
         # Vital stats (0 - 100)
-        self.energy = 80
-        self.happiness = 70
-        self.hunger = 30 # lower is better (0 = satisfied, 100 = starving)
+        self.energy = state_dict.get("energy", 80)
+        self.happiness = state_dict.get("happiness", 70)
+        self.hunger = state_dict.get("hunger", 30) # lower is better (0 = satisfied, 100 = starving)
         
-        # Profile settings (Puppy default)
-        self.profile = "Puppy"
-        self.pet_name = "Kepler"
+        # Profile settings
+        self.profile = state_dict.get("profile", "Puppy")
+        self.pet_name = state_dict.get("pet_name", "Kepler")
         
         # Leveling & XP
-        self.level = 1
-        self.xp = 0
+        self.level = state_dict.get("level", 1)
+        self.xp = state_dict.get("xp", 0)
         
         self.logs = []
         self.log_lock = threading.Lock()
@@ -460,18 +460,15 @@ class DeskPet:
         self.button_releases = []
 
         # Trainer Health & sleep covers
-        self.trainer_hp = 100
+        self.trainer_hp = state_dict.get("trainer_hp", 100)
         self.sleep_cover_start = 0.0
-
-        # Load state from file (if exists)
-        self.load_state()
-
 
         self.add_log(f"Pet {self.pet_name} initialized. Welcome!")
 
         # Start autonomous behavior thread
         self.brain_thread = threading.Thread(target=self._brain_loop, daemon=True)
         self.brain_thread.start()
+
 
     def add_log(self, msg):
         timestamp = time.strftime("%H:%M:%S")
@@ -484,10 +481,11 @@ class DeskPet:
     # State Persistence (Save/Load)
     # -------------------------------------------------------------
     def get_state_file_path(self):
-        return os.path.expanduser("~/.wedo_pet_state.json")
+        return os.path.expanduser(f"~/.wedo_pets/{self.pet_name}.json")
 
     def save_state(self):
         try:
+            os.makedirs(os.path.expanduser("~/.wedo_pets"), exist_ok=True)
             state = {
                 "pet_name": self.pet_name,
                 "profile": self.profile,
@@ -513,14 +511,13 @@ class DeskPet:
                     self.profile = state.get("profile", self.profile)
                     self.level = state.get("level", self.level)
                     self.xp = state.get("xp", self.xp)
-
                     self.energy = state.get("energy", self.energy)
                     self.happiness = state.get("happiness", self.happiness)
                     self.hunger = state.get("hunger", self.hunger)
                     self.trainer_hp = state.get("trainer_hp", self.trainer_hp)
-
             except Exception as e:
                 self.add_log(f"Error loading state: {e}")
+
 
     # -------------------------------------------------------------
     # Leveling & XP System
@@ -568,7 +565,8 @@ class DeskPet:
     # Ollama AI Autopilot & Chat Integration
     # -------------------------------------------------------------
     def get_soul_file_path(self):
-        return os.path.expanduser("~/.wedo_pet_soul.txt")
+        return os.path.expanduser(f"~/.wedo_pets/{self.pet_name}_soul.txt")
+
 
     def ensure_soul_file(self):
         path = self.get_soul_file_path()
@@ -1744,10 +1742,245 @@ def handle_profile_menu(pet):
         pet.change_profile(profiles[choice])
     time.sleep(0.5)
 
+
+# -----------------------------------------------------------------
+# Multi-Pet Manager CLI
+# -----------------------------------------------------------------
+def select_or_create_pet():
+    dir_path = os.path.expanduser("~/.wedo_pets")
+    os.makedirs(dir_path, exist_ok=True)
+    
+    while True:
+        # Scan for existing JSON files
+        files = [f for f in os.listdir(dir_path) if f.endswith(".json")]
+        
+        if not files:
+            console.print("\n[yellow]No saved pets found. Let's create your first companion![/yellow]")
+            return create_new_pet_flow()
+            
+        table = Table(title="🐾 Choose Your Desk Pet 🐾", border_style="cyan")
+        table.add_column("No.", style="yellow", justify="right")
+        table.add_column("Name", style="white")
+        table.add_column("Profile", style="magenta")
+        table.add_column("Level", style="green")
+        
+        pet_states = []
+        for idx, filename in enumerate(sorted(files)):
+            path = os.path.join(dir_path, filename)
+            try:
+                with open(path, "r") as f:
+                    state = json.load(f)
+                    pet_states.append(state)
+                    table.add_row(
+                        str(idx + 1),
+                        state.get("pet_name", "Unknown"),
+                        state.get("profile", "Puppy"),
+                        str(state.get("level", 1))
+                    )
+            except Exception:
+                pass
+                
+        console.print(table)
+        console.print("[n] Create a New Pet")
+        console.print("[d] Delete a Pet")
+        console.print("[0] Exit")
+        
+        choice = console.input("\n[bold cyan]Select choice: [/bold cyan]").strip().lower()
+        if choice == "0":
+            sys.exit(0)
+        elif choice == "n":
+            return create_new_pet_flow()
+        elif choice == "d":
+            delete_pet_flow(files)
+        else:
+            try:
+                num = int(choice)
+                if 1 <= num <= len(pet_states):
+                    return pet_states[num - 1]
+                else:
+                    console.print("[red]Invalid selection.[/red]")
+            except ValueError:
+                console.print("[red]Invalid choice. Enter number, 'n', 'd', or '0'.[/red]")
+            time.sleep(1.0)
+
+def create_new_pet_flow():
+    console.print("\n=== 🐾 Create a New WeDo 2.0 Desk Pet ===\n", style="bold cyan")
+    
+    # 1. Profile select
+    profiles = ["Puppy", "Kitten", "Robot", "Dragon"]
+    table = Table(title="Select a Profile", show_header=False)
+    for idx, p in enumerate(profiles):
+        table.add_row(f"[{idx + 1}]", p)
+    console.print(table)
+    
+    profile_choice = ""
+    while profile_choice not in ["1", "2", "3", "4"]:
+        profile_choice = console.input("[cyan]Choose profile (1-4): [/cyan]").strip()
+    profile = profiles[int(profile_choice) - 1]
+    
+    # Default names
+    default_names = {
+        "Puppy": "Kepler",
+        "Kitten": "Luna",
+        "Robot": "RoboPet",
+        "Dragon": "Draco"
+    }
+    
+    # 2. Name select
+    name = ""
+    default_name = default_names[profile]
+    while not name:
+        name = console.input(f"[cyan]Enter pet name (default '{default_name}'): [/cyan]").strip()
+        if not name:
+            name = default_name
+            
+    # Check if duplicate name
+    dir_path = os.path.expanduser("~/.wedo_pets")
+    if os.path.exists(os.path.join(dir_path, f"{name}.json")):
+        console.print(f"[yellow]A pet named '{name}' already exists. Appending a random number...[/yellow]")
+        import random
+        name = f"{name}{random.randint(10, 99)}"
+        
+    state = {
+        "pet_name": name,
+        "profile": profile,
+        "level": 1,
+        "xp": 0,
+        "energy": 80,
+        "happiness": 70,
+        "hunger": 30,
+        "trainer_hp": 100
+    }
+    
+    # Save the initial pet json
+    try:
+        path = os.path.join(dir_path, f"{name}.json")
+        with open(path, "w") as f:
+            json.dump(state, f)
+        console.print(f"[green]Successfully created '{name}' ({profile})![/green]\n")
+        time.sleep(1.0)
+    except Exception as e:
+        console.print(f"[red]Error saving new pet: {e}[/red]")
+        
+    return state
+
+def delete_pet_flow(files):
+    console.print("\n--- Delete a Saved Pet ---", style="bold red")
+    for idx, f in enumerate(sorted(files)):
+        console.print(f"[{idx + 1}] {f[:-5]}")
+    console.print("[0] Cancel")
+    
+    choice = console.input("\n[red]Choose pet to delete: [/red]").strip()
+    if choice == "0" or not choice:
+        return
+        
+    try:
+        num = int(choice)
+        if 1 <= num <= len(files):
+            filename = sorted(files)[num - 1]
+            pet_name = filename[:-5]
+            confirm = console.input(f"[red]Are you sure you want to delete '{pet_name}'? (y/n): [/red]").strip().lower()
+            if confirm == "y":
+                os.remove(os.path.expanduser(f"~/.wedo_pets/{filename}"))
+                soul_path = os.path.expanduser(f"~/.wedo_pets/{pet_name}_soul.txt")
+                if os.path.exists(soul_path):
+                    os.remove(soul_path)
+                console.print(f"[green]Deleted '{pet_name}' successfully.[/green]")
+        else:
+            console.print("[red]Invalid selection.[/red]")
+    except Exception as e:
+        console.print(f"[red]Delete error: {e}[/red]")
+    time.sleep(1.0)
+
+
+# -----------------------------------------------------------------
+# Bluetooth Hub Selection CLI Menu
+# -----------------------------------------------------------------
+def select_hub_flow(default_hub_name):
+    if not ble_available:
+        console.print("[yellow]Warning: bleak library is not installed. BLE scanning unavailable.[/yellow]")
+        console.print("[yellow]Automatically falling back to Simulated Mock Hub.[/yellow]")
+        time.sleep(1.5)
+        return MockWeDo2Hub("Mock Smart Hub"), "Simulated (Mock)"
+
+    while True:
+        console.print("\n[cyan]Scanning for nearby WeDo Smarthub Bluetooth Low Energy devices (3 seconds)...[/cyan]")
+        devices = []
+        try:
+            devices = runner.run(BleakScanner.discover(timeout=3.0))
+        except Exception as e:
+            console.print(f"[red]BLE Scan Error: {e}[/red]")
+            
+        # Filter WeDo-like devices first
+        wedo_devices = []
+        other_devices = []
+        for dev in devices:
+            name = dev.name or "Unknown Device"
+            if "hub" in name.lower() or "lpf" in name.lower() or "wedo" in name.lower() or "lego" in name.lower() or "smart" in name.lower():
+                wedo_devices.append(dev)
+            elif dev.name:
+                other_devices.append(dev)
+                
+        display_devices = wedo_devices + other_devices
+        
+        table = Table(title="📡 Select Your LEGO Smarthub 📡", border_style="cyan")
+        table.add_column("No.", style="yellow", justify="right")
+        table.add_column("Name", style="green")
+        table.add_column("MAC Address", style="magenta")
+        table.add_column("RSSI", style="blue")
+        
+        for idx, dev in enumerate(display_devices):
+            rssi = getattr(dev, "rssi", "N/A")
+            if rssi == "N/A" and hasattr(dev, "metadata") and dev.metadata:
+                rssi = dev.metadata.get("rssi", "N/A")
+            rssi_str = f"{rssi} dBm" if rssi != "N/A" else "N/A"
+            table.add_row(str(idx + 1), str(dev.name or "Unknown"), str(dev.address), rssi_str)
+            
+        console.print(table)
+        console.print("[m] Start in Mock/Simulation Mode (Offline)")
+        console.print("[r] Rescan for Bluetooth Devices")
+        console.print("[0] Exit")
+        
+        choice = console.input("\n[bold cyan]Select choice: [/bold cyan]").strip().lower()
+        if choice == "0":
+            sys.exit(0)
+        elif choice == "r":
+            continue
+        elif choice == "m":
+            return MockWeDo2Hub("Mock Smart Hub"), "Simulated (Mock)"
+        else:
+            try:
+                num = int(choice)
+                if 1 <= num <= len(display_devices):
+                    target_dev = display_devices[num - 1]
+                    target_name = target_dev.name or target_dev.address
+                    console.print(f"[cyan]Connecting to Smarthub '{target_name}'...[/cyan]")
+                    try:
+                        hub = RealWeDo2Hub(target_name)
+                        console.print("[green]Connected successfully![/green]")
+                        hub.beep(600, 150)
+                        time.sleep(0.1)
+                        hub.beep(850, 200)
+                        hub.set_led("green")
+                        return hub, "Physical (BLE)"
+                    except Exception as e:
+                        console.print(f"[red]Connection failed: {e}[/red]")
+                        console.print("Please verify the hub is powered on and retry.")
+                        time.sleep(2.0)
+                else:
+                    console.print("[red]Invalid selection number.[/red]")
+                    time.sleep(1.0)
+            except ValueError:
+                console.print("[red]Invalid choice. Enter a number, 'm', 'r', or '0'.[/red]")
+                time.sleep(1.0)
+
+
 # -----------------------------------------------------------------
 # CLI Connection Launcher & Arguments
 # -----------------------------------------------------------------
 def main():
+
+
     parser = argparse.ArgumentParser(description="Start the interactive LEGO WeDo 2.0 CLI Desk Pet.")
     parser.add_argument("--hub-name", type=str, default="Isaiah Smart Hub",
                         help="Bluetooth name of your WeDo 2.0 hub (default: Isaiah Smart Hub).")
@@ -1786,24 +2019,13 @@ def main():
         hub = MockWeDo2Hub(args.hub_name)
         hub_type = "Simulated (Mock)"
     else:
-        console.print(f"[cyan]Connecting to LEGO WeDo 2.0 Smarthub named '{args.hub_name}' via Bluetooth BLE...[/cyan]")
-        console.print("[yellow]Please ensure your Smarthub is powered ON and blinking blue/green.[/yellow]")
-        try:
-            hub = RealWeDo2Hub(args.hub_name)
-            console.print("[green]Connected successfully![/green]")
-            hub.beep(600, 150)
-            time.sleep(0.1)
-            hub.beep(850, 200)
-            hub.set_led("green")
-        except Exception as e:
-            console.print(f"[red]Error connecting to Bluetooth: {e}[/red]")
-            console.print("[yellow]Falling back to SIMULATION (MOCK) mode so you can still test the CLI pet dashboard![/yellow]")
-            hub = MockWeDo2Hub(args.hub_name)
-            hub_type = "Simulated (Mock)"
-            time.sleep(2.0)
+        hub, hub_type = select_hub_flow(args.hub_name)
 
-    # Initialize Pet Core
-    pet = DeskPet(hub)
+
+    # Select or initialize Pet state
+    state_dict = select_or_create_pet()
+    pet = DeskPet(hub, state_dict)
+
 
     # Show initial live dashboard
     run_live_dashboard(pet, hub_type)
