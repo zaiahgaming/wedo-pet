@@ -452,7 +452,12 @@ class DeskPet:
         self.ai_autopilot = False
         self.last_ai_trigger_time = 0.0
 
+        # Screaming feeding challenge
+        self.screaming_for_food = False
+        self.screaming_cycle_start = 0.0
+
         # Load state from file (if exists)
+
         self.load_state()
 
         self.add_log(f"Pet {self.pet_name} initialized. Welcome!")
@@ -1010,6 +1015,54 @@ class DeskPet:
             self.frame = (self.frame + 1) % 100
             time.sleep(0.2)
 
+            if self.screaming_for_food:
+                elapsed = time.time() - self.screaming_cycle_start
+                if elapsed < 3.0:
+                    # Red Phase (Too Early)
+                    try:
+                        self.hub.set_led("red")
+                    except Exception:
+                        pass
+                    if int(elapsed * 5) % 4 == 0:
+                        try:
+                            self.hub.beep(850 if int(elapsed * 2) % 2 == 0 else 600, 150)
+                        except Exception:
+                            pass
+                    
+                    if self.hub.button_state == 1:
+                        self.add_log(f"[Too Early] Press ignored! The light is RED!")
+                        try:
+                            self.hub.beep(120, 300)
+                        except Exception:
+                            pass
+                        self.screaming_cycle_start = time.time()  # reset penalty
+                        time.sleep(0.4)  # debounce
+                elif elapsed < 7.0:
+                    # Green Phase (Feed Now!)
+                    try:
+                        self.hub.set_led("green")
+                    except Exception:
+                        pass
+                    
+                    if self.hub.button_state == 1:
+                        self.add_log(f"[Success] Button clicked during GREEN light!")
+                        try:
+                            self.hub.beep(600, 100)
+                            time.sleep(0.05)
+                            self.hub.beep(900, 200)
+                        except Exception:
+                            pass
+                        self.screaming_for_food = False
+                        self.interact_feed()
+                        time.sleep(0.4)  # debounce
+                else:
+                    # Reset cycle
+                    self.add_log(f"[Scream Cycle Reset] Green light window missed!")
+                    self.screaming_cycle_start = time.time()
+                
+                continue
+
+
             # Get latest sensor values from hub
             dist = 10
             tilt = "Neutral"
@@ -1107,10 +1160,13 @@ class DeskPet:
                     self.hunger = min(100, self.hunger + 2)
                     self.happiness = max(0, self.happiness - 1)
                     
-                # Hunger warnings
-                if self.hunger > 80 and random.random() < 0.3:
-                    self.add_log(f"*{self.pet_name} whines* - I am starving! Please feed me!")
-                    self.hub.beep(350, 300)
+                # Hunger warnings & screaming challenge trigger
+                if self.hunger > 80 and not self.screaming_for_food and not self.music_playing:
+                    self.screaming_for_food = True
+                    self.screaming_cycle_start = time.time()
+                    self.mood = "angry"
+                    self.add_log(f"[Starving] {self.pet_name} is screaming for food! Click the physical Hub Button ONLY when the light turns GREEN!")
+
                     
             # 2. Tilt Dizziness Trigger
             if tilt != "Neutral":
@@ -1347,8 +1403,11 @@ def print_main_menu(pet):
     table.add_row("[9]", "Hub Status & Telemetry Summary", "[Quick diagnostic output]")
     table.add_row("[a]", "Toggle Ollama AI Autopilot Mode", f"[Currently: {'ON' if pet.ai_autopilot else 'OFF'}]")
     table.add_row("[c]", "Chat with Pet (Ollama AI)", "[Query your local qwen2.5:3b model]")
+    if "(MOCK)" in pet.hub.hub_name:
+        table.add_row("[b]", "Simulate Hub Button Click", "[Simulate physical button press for feeding challenge]")
     table.add_row("[0]", "Exit", "[Gracefully disconnect and close]")
     console.print(table)
+
 
 def handle_chat_mode(pet):
     console.print("\n--- 💬 Chat with your Pet (Ollama AI) ---", style="bold green")
@@ -1572,7 +1631,7 @@ def main():
     try:
         while pet.is_running:
             print_main_menu(pet)
-            choice = console.input("[bold green]Choose an action (0-9, a, c): [/bold green]").strip().lower()
+            choice = console.input("[bold green]Choose an action (0-9, a, c, b): [/bold green]").strip().lower()
 
             if choice == "1":
                 run_live_dashboard(pet, hub_type)
@@ -1617,12 +1676,21 @@ def main():
                 time.sleep(1.0)
             elif choice == "c":
                 handle_chat_mode(pet)
+            elif choice == "b" and "(MOCK)" in hub.hub_name:
+                def simulate_click():
+                    hub.button_state = 1
+                    time.sleep(0.5)
+                    hub.button_state = 0
+                threading.Thread(target=simulate_click, daemon=True).start()
+                console.print("[yellow]Simulating physical button click on WeDo Smarthub...[/yellow]")
+                time.sleep(0.6)
             elif choice == "0":
                 console.print("[cyan]Disconnecting from LEGO Smarthub...[/cyan]")
                 break
             else:
                 console.print("[red]Invalid selection. Please choose a valid action.[/red]")
                 time.sleep(0.8)
+
 
                 
     except KeyboardInterrupt:
