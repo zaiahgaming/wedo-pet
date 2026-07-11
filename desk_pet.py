@@ -2412,93 +2412,145 @@ def select_hub_flow(default_hub_name):
 # WeDo Games & Interactive Tutorial
 # -----------------------------------------------------------------
 def handle_games_menu(pet):
-    options = [
-        "Interactive Live Tutorial - Walk through sensors and triggers",
-        "Obstacle Course (Stop-Before-Crash) - Autonomous car navigation",
-        "Color Simon Says - Memorize LED color patterns",
-        "Back to Main Menu"
-    ]
     while True:
+        dist_p = pet.hub.check_connected("Distance Sensor")
+        motor_p = pet.hub.check_connected("Motor")
+        
+        options = []
+        mapping = {}
+        
+        options.append("Interactive Live Tutorial - Walk through sensors and triggers")
+        mapping[len(options) - 1] = "tutorial"
+        
+        if dist_p and motor_p:
+            options.append("Obstacle Course (Stop-Before-Crash) - Autonomous car navigation")
+            mapping[len(options) - 1] = "obstacle"
+            
+        options.append("Color Simon Says - Memorize LED color patterns")
+        mapping[len(options) - 1] = "simon"
+        
+        options.append("Back to Main Menu")
+        mapping[len(options) - 1] = "back"
+        
         sel = choose_option_interactive("Pet Arcade & Games Menu", options)
-        if sel == -1 or sel == 3:
+        if sel == -1:
             break
-        elif sel == 0:
+            
+        action = mapping.get(sel, "back")
+        if action == "back":
+            break
+        elif action == "tutorial":
             run_interactive_tutorial(pet)
-        elif sel == 1:
+        elif action == "obstacle":
             run_obstacle_course_game(pet)
-        elif sel == 2:
+        elif action == "simon":
             run_simon_says_game(pet)
+
 
 
 def run_interactive_tutorial(pet):
     console.clear()
     console.print("=== 🎓 Interactive WeDo Desk Pet Tutorial ===\n", style="bold green")
-    console.print("This live tutorial will guide you through WeDo 2.0 sensors and behaviors.\n")
+    console.print("This live tutorial adapts to your connected LEGO WeDo 2.0 modules.\n")
+    
+    dist_p = pet.hub.check_connected("Distance Sensor")
+    tilt_p = pet.hub.check_connected("Tilt Sensor")
+    motor_p = pet.hub.check_connected("Motor")
+    
+    console.print("[bold cyan]Connected WeDo Hardware Modules Detected:[/bold cyan]")
+    console.print(f" 🔘 Smarthub Casing Button: [green]Built-in (Ready)[/green]")
+    console.print(f" 📡 Distance Sensor: {'[green]Connected[/green]' if dist_p else '[yellow]Not Connected (Skip Step 1)[/yellow]'}")
+    console.print(f" 📐 Tilt Sensor: {'[green]Connected[/green]' if tilt_p else '[yellow]Not Connected (Skip Step 2)[/yellow]'}")
+    console.print(f" ⚙️ Motor: {'[green]Connected[/green]' if motor_p else '[yellow]Not Connected[/yellow]'}")
+    console.print("\nPress Enter to begin the tutorial...")
+    try:
+        console.input()
+    except (KeyboardInterrupt, EOFError):
+        return
     
     # Step 1: Petting (Distance Sensor)
-    console.print("[yellow]Step 1: Direct Petting Challenge[/yellow]")
-    console.print("Put your hand or an object within [bold cyan]6cm[/bold cyan] of the Distance Sensor to pet Kepler.")
-    console.print("Waiting for sensor input...")
-    
-    start_t = time.time()
-    pet_detected = False
-    while time.time() - start_t < 15.0:
-        dist = 10
-        dist_p = pet.hub.check_connected("Distance Sensor")
-        if dist_p:
-            dist = pet.hub.sensor_cache[dist_p]["distance"]
-        if dist < 6:
-            pet_detected = True
-            break
-        time.sleep(0.1)
+    if dist_p:
+        console.clear()
+        console.print("=== 🎓 Interactive WeDo Desk Pet Tutorial ===\n", style="bold green")
+        console.print("[yellow]Step 1: Direct Petting Challenge[/yellow]")
+        console.print("Put your hand or an object within [bold cyan]6cm[/bold cyan] of the Distance Sensor to pet Kepler.")
+        console.print("Waiting for sensor input (15s timeout)...")
         
-    if pet_detected:
-        console.print("\n[green]Success! Petting detected! Kepler wagged his tail and chirped happily.[/green]\n")
-        pet.interact_pet()
+        start_t = time.time()
+        pet_detected = False
+        while time.time() - start_t < 15.0:
+            dist = 10
+            dist_p_curr = pet.hub.check_connected("Distance Sensor")
+            if dist_p_curr:
+                dist = pet.hub.sensor_cache[dist_p_curr]["distance"]
+            if dist < 6:
+                pet_detected = True
+                break
+            time.sleep(0.1)
+            
+        if pet_detected:
+            console.print("\n[green]Success! Petting detected! Kepler chirped happily.[/green]\n")
+            pet.interact_pet()
+        else:
+            console.print("\n[red]Timeout: No petting detected.[/red]\n")
+        try:
+            console.input("Press Enter to proceed...")
+        except (KeyboardInterrupt, EOFError):
+            return
     else:
-        console.print("\n[red]Timeout: No petting detected. (Make sure distance sensor is plugged into Port 1 or 2).[/red]\n")
-    console.input("Press Enter to proceed to Step 2...")
-    
+        console.print("\n[dim]Skipping Step 1: Distance Sensor not connected.[/dim]")
+        time.sleep(1.0)
+        
     # Step 2: Dizziness (Tilt Sensor)
-    console.clear()
-    console.print("=== 🎓 Interactive WeDo Desk Pet Tutorial ===\n", style="bold green")
-    console.print("[yellow]Step 2: Tilt Dizziness Demonstration[/yellow]")
-    console.print("Tilt the Smarthub in [bold cyan]any direction[/bold cyan] (Forward, Backward, Left, or Right).")
-    console.print("Waiting for tilt input...")
-    
-    start_t = time.time()
-    tilt_detected = False
-    while time.time() - start_t < 15.0:
-        tilt = "Neutral"
-        tilt_p = pet.hub.check_connected("Tilt Sensor")
-        if tilt_p:
-            tilt = pet.hub.sensor_cache[tilt_p]["tilt"]
-        if tilt != "Neutral" and tilt != "Unknown":
-            tilt_detected = True
-            break
-        time.sleep(0.1)
+    if tilt_p:
+        console.clear()
+        console.print("=== 🎓 Interactive WeDo Desk Pet Tutorial ===\n", style="bold green")
+        console.print("[yellow]Step 2: Tilt Dizziness Demonstration[/yellow]")
+        console.print("Tilt the Smarthub in [bold cyan]any direction[/bold cyan] (Forward, Backward, Left, or Right).")
+        console.print("Waiting for tilt input (15s timeout)...")
         
-    if tilt_detected:
-        console.print(f"\n[green]Success! Tilt '{tilt}' detected. Kepler is now dizzy! (@_@)[/green]\n")
-        for _ in range(4):
-            try:
-                pet.hub.beep(400, 100)
-                time.sleep(0.05)
-                pet.hub.beep(300, 100)
-                time.sleep(0.05)
-            except Exception:
-                pass
+        start_t = time.time()
+        tilt_detected = False
+        while time.time() - start_t < 15.0:
+            tilt = "Neutral"
+            tilt_p_curr = pet.hub.check_connected("Tilt Sensor")
+            if tilt_p_curr:
+                tilt = pet.hub.sensor_cache[tilt_p_curr]["tilt"]
+            if tilt != "Neutral" and tilt != "Unknown":
+                tilt_detected = True
+                break
+            time.sleep(0.1)
+            
+        if tilt_detected:
+            console.print(f"\n[green]Success! Tilt '{tilt}' detected. Kepler is now dizzy! (@_@)[/green]\n")
+            for _ in range(4):
+                try:
+                    pet.hub.beep(400, 100)
+                    time.sleep(0.05)
+                    pet.hub.beep(300, 100)
+                    time.sleep(0.05)
+                except Exception:
+                    pass
+        else:
+            console.print("\n[red]Timeout: No tilt detected.[/red]\n")
+        try:
+            console.input("Press Enter to proceed...")
+        except (KeyboardInterrupt, EOFError):
+            return
     else:
-        console.print("\n[red]Timeout: No tilt detected. (Make sure tilt sensor is plugged into Port 1 or 2).[/red]\n")
-    console.input("Press Enter to proceed to Step 3...")
-    
+        console.print("\n[dim]Skipping Step 2: Tilt Sensor not connected.[/dim]")
+        time.sleep(1.0)
+        
     # Step 3: Feeding Challenge
     console.clear()
     console.print("=== 🎓 Interactive WeDo Desk Pet Tutorial ===\n", style="bold green")
     console.print("[yellow]Step 3: Feeding Challenge Demonstration[/yellow]")
     console.print("Let's simulate a hunger fit! The LED light will turn RED. You must wait for it to turn GREEN,")
-    console.print("then click the physical button (or simulate click using option 'b').")
-    console.input("Press Enter to start simulation...")
+    console.print("then click the physical button (or simulate click using option 'b' if on Mock Hub).")
+    try:
+        console.input("Press Enter to start simulation...")
+    except (KeyboardInterrupt, EOFError):
+        return
     
     pet.screaming_for_food = True
     pet.screaming_cycle_start = time.time()
@@ -2507,7 +2559,11 @@ def run_interactive_tutorial(pet):
         time.sleep(0.2)
         
     console.print("\n[green]Great job! You finished the interactive tutorial. Kepler is fully trained![/green]")
-    console.input("\nPress Enter to return to games menu...")
+    try:
+        console.input("\nPress Enter to return...")
+    except (KeyboardInterrupt, EOFError):
+        return
+
 
 def run_obstacle_course_game(pet):
     console.clear()
