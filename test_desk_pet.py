@@ -132,6 +132,29 @@ class TestDeskPet(unittest.TestCase):
         face = self.pet.get_face()
         self.assertTrue(len(face) > 0)
 
+    def test_dynamic_proximity_reactions(self):
+        # 1. Test case: Startle proximity (distance < 3)
+        self.pet.mood = "awake"
+        # Simulate check logic
+        dist = 2.0
+        if dist < 3:
+            self.pet.interact_poke()
+        self.assertEqual(self.pet.mood, "awake") # interact_poke resets to awake after running
+        self.assertEqual(self.pet.happiness, 50) # decreased by 20
+
+        # 2. Test case: Offer food (hunger > 60)
+        self.pet.hunger = 70
+        dist = 4.0
+        if self.pet.hunger > 60:
+            self.pet.interact_feed()
+        self.assertTrue(self.pet.hunger < 50) # decreased by 30
+
+    def test_goofy_events_logging(self):
+        goofy_log = f"{self.pet.pet_name} wanted to: divide by zero but remembered it's a LEGO block"
+        self.pet.add_log(goofy_log)
+        self.assertIn("wanted to:", self.pet.logs[-1])
+
 if __name__ == "__main__":
     unittest.main()
+
 

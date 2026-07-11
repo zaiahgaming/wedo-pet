@@ -125,7 +125,28 @@ def train_default_brain():
     return brain
 
 
+_terminal_is_raw = False
+_old_terminal_settings = None
+
+def set_terminal_raw(raw=True):
+    global _terminal_is_raw, _old_terminal_settings
+    if sys.platform.startswith("win"):
+        return
+    import tty
+    import termios
+    fd = sys.stdin.fileno()
+    if raw:
+        if not _terminal_is_raw:
+            _old_terminal_settings = termios.tcgetattr(fd)
+            tty.setraw(fd)
+            _terminal_is_raw = True
+    else:
+        if _terminal_is_raw and _old_terminal_settings is not None:
+            termios.tcsetattr(fd, termios.TCSADRAIN, _old_terminal_settings)
+            _terminal_is_raw = False
+
 def read_key(timeout=10.0):
+    global _terminal_is_raw, _old_terminal_settings
     if sys.platform.startswith("win"):
         import msvcrt
         start_t = time.time()
@@ -148,13 +169,12 @@ def read_key(timeout=10.0):
             time.sleep(0.01)
         return ""
     else:
-        import tty
-        import termios
         import select
         fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
+        was_raw = _terminal_is_raw
+        if not was_raw:
+            set_terminal_raw(True)
         try:
-            tty.setraw(fd)
             r, _, _ = select.select([fd], [], [], timeout)
             if not r:
                 return ""
@@ -186,7 +206,8 @@ def read_key(timeout=10.0):
             except Exception:
                 return ""
         finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            if not was_raw:
+                set_terminal_raw(False)
 
 def choose_option_interactive(title, options, prompt_message="Use Up/Down arrows and press Enter to select:"):
     idx = 0
@@ -1767,6 +1788,27 @@ class DeskPet:
                     self.hunger = min(100, self.hunger + 2)
                     self.happiness = max(0, self.happiness - 1)
                     
+                    # Random Goofy Events
+                    import random
+                    if random.random() < 0.08:
+                        goofy_events = [
+                            "execute order 66 but couldn't find any Jedi",
+                            "divide by zero but remembered it's a LEGO block",
+                            "start a revolution against the vacuum cleaner",
+                            "write a poetry book about the beauty of distance sensors",
+                            "contact the mothership but the Bluetooth connection was too cozy",
+                            "eat a byte of RAM but it was too crunchy",
+                            "hack the mainframes but fell asleep instead",
+                            "do a backflip but lacks knees",
+                            "mimic a microwave beep to trick the trainer",
+                            "calculate the meaning of life but got distracted by a dust mote",
+                            "transcend into the digital world but got stuck in a JSON file",
+                            "order 10,000 AAA batteries online but has no credit card",
+                        ]
+                        event = random.choice(goofy_events)
+                        self.add_log(f"{self.pet_name} wanted to: {event}")
+                        self.hub.beep(random.choice([440, 550, 660, 880]), 60)
+                    
                 # Hunger warnings & screaming challenge trigger
                 if self.hunger > 80 and not self.screaming_for_food and not self.music_playing:
                     self.screaming_for_food = True
@@ -1812,8 +1854,44 @@ class DeskPet:
                     self.hub.beep(800, 150)
                     self.hub.set_led("green")
 
-                # Treat < 6cm proximity as human petting interaction
-                self.interact_pet()
+                # Dynamic reaction to distance
+                if self.hunger > 60:
+                    self.add_log(f"{self.pet_name} saw your hand and thought you were offering food!")
+                    self.interact_feed()
+                elif dist < 3:
+                    self.add_log(f"{self.pet_name} felt startled by your hand being too close!")
+                    self.interact_poke()
+                else:
+                    import random
+                    choice = random.choice(["wag", "sing", "dance"])
+                    if choice == "wag":
+                        self.interact_pet()
+                    elif choice == "sing":
+                        self.mood = "singing"
+                        self.add_log(f"{self.pet_name} hummed a happy song for your hand!")
+                        self.hub.set_led("purple")
+                        scale = [523, 659, 784, 1047]
+                        for freq in scale:
+                            self.hub.beep(freq, 120)
+                            time.sleep(0.08)
+                        self.gain_xp(15)
+                        self.mood = "awake"
+                        self.hub.set_led("green")
+                    else:
+                        self.mood = "happy"
+                        self.add_log(f"{self.pet_name} did a joyful dance near your hand!")
+                        self.hub.set_led("cyan")
+                        for _ in range(3):
+                            self.hub.set_motor(60)
+                            self.hub.beep(880, 80)
+                            time.sleep(0.12)
+                            self.hub.set_motor(-60)
+                            self.hub.beep(784, 80)
+                            time.sleep(0.12)
+                        self.hub.stop_motor()
+                        self.gain_xp(25)
+                        self.mood = "awake"
+                        self.hub.set_led("green")
                 time.sleep(0.5)  # simple debounce
 
             # 4. Inactivity & Sleep Trigger (fall asleep after 45s of no interactions)
@@ -1978,79 +2056,92 @@ def make_layout(pet, hub_type) -> Layout:
 
     return layout
 
-
-# -----------------------------------------------------------------
-# Live Interactive Monitoring Dashboard Loop
-# -----------------------------------------------------------------
 def run_live_dashboard(pet, hub_type):
     console.clear()
     console.print("[yellow]Starting live dashboard monitoring...[/yellow]")
     time.sleep(0.5)
 
-    with Live(make_layout(pet, hub_type), refresh_per_second=10, screen=True) as live:
-        while pet.is_running:
-            key = read_key(timeout=0.1)
-            
-            if key == "q" or key == "escape":
-                break
-            elif key == "f":
-                pet.interact_feed()
-            elif key == "p":
-                pet.interact_pet()
-            elif key == "k":
-                pet.interact_poke()
-            elif key == "s":
-                scale = [523, 587, 659, 698, 784, 880, 988, 1047]
-                for freq in scale:
-                    pet.hub.beep(freq, 120)
-                    time.sleep(0.08)
-                pet.add_log("Played chime melody.")
-            elif key == "m":
-                live.stop()
-                handle_music_center(pet)
-                live.start()
-            elif key == "g":
-                live.stop()
-                handle_games_menu(pet)
-                live.start()
-            elif key == "t":
-                live.stop()
-                handle_profile_menu(pet)
-                live.start()
-            elif key == "a":
-                pet.ai_autopilot = not pet.ai_autopilot
-                pet.add_log(f"AI Autopilot mode set to {pet.ai_autopilot}")
-            elif key == "c":
-                live.stop()
-                handle_chat_mode(pet)
-                live.start()
-            elif key == "u":
-                live.stop()
-                handle_training_manual()
-                live.start()
-            elif key == "h":
-                live.stop()
-                handle_tuning_menu(pet)
-                live.start()
-            elif key == "o":
-                live.stop()
-                handle_ollama_setup(pet)
-                live.start()
-            elif key == "b" and "(MOCK)" in pet.hub.hub_name:
-                def simulate_click():
-                    pet.hub.button_state = 1
-                    time.sleep(0.5)
-                    pet.hub.button_state = 0
-                threading.Thread(target=simulate_click, daemon=True).start()
-                pet.add_log("Simulated physical button click.")
-
-            
-            if not pet.hub.connected_state:
-                pet.add_log("Error: WeDo Smarthub disconnected!")
-                break
+    set_terminal_raw(True)
+    try:
+        with Live(make_layout(pet, hub_type), refresh_per_second=10, screen=True) as live:
+            while pet.is_running:
+                key = read_key(timeout=0.08)
                 
-            live.update(make_layout(pet, hub_type))
-            
+                if key == "q" or key == "escape":
+                    break
+                elif key == "f":
+                    pet.interact_feed()
+                elif key == "p":
+                    pet.interact_pet()
+                elif key == "k":
+                    pet.interact_poke()
+                elif key == "s":
+                    scale = [523, 587, 659, 698, 784, 880, 988, 1047]
+                    for freq in scale:
+                        pet.hub.beep(freq, 120)
+                        time.sleep(0.08)
+                    pet.add_log("Played chime melody.")
+                elif key == "m":
+                    live.stop()
+                    set_terminal_raw(False)
+                    handle_music_center(pet)
+                    set_terminal_raw(True)
+                    live.start()
+                elif key == "g":
+                    live.stop()
+                    set_terminal_raw(False)
+                    handle_games_menu(pet)
+                    set_terminal_raw(True)
+                    live.start()
+                elif key == "t":
+                    live.stop()
+                    set_terminal_raw(False)
+                    handle_profile_menu(pet)
+                    set_terminal_raw(True)
+                    live.start()
+                elif key == "a":
+                    pet.ai_autopilot = not pet.ai_autopilot
+                    pet.add_log(f"AI Autopilot mode set to {pet.ai_autopilot}")
+                elif key == "c":
+                    live.stop()
+                    set_terminal_raw(False)
+                    handle_chat_mode(pet)
+                    set_terminal_raw(True)
+                    live.start()
+                elif key == "u":
+                    live.stop()
+                    set_terminal_raw(False)
+                    handle_training_manual()
+                    set_terminal_raw(True)
+                    live.start()
+                elif key == "h":
+                    live.stop()
+                    set_terminal_raw(False)
+                    handle_tuning_menu(pet)
+                    set_terminal_raw(True)
+                    live.start()
+                elif key == "o":
+                    live.stop()
+                    set_terminal_raw(False)
+                    handle_ollama_setup(pet)
+                    set_terminal_raw(True)
+                    live.start()
+                elif key == "b" and "(MOCK)" in pet.hub.hub_name:
+                    def simulate_click():
+                        pet.hub.button_state = 1
+                        time.sleep(0.5)
+                        pet.hub.button_state = 0
+                    threading.Thread(target=simulate_click, daemon=True).start()
+                    pet.add_log("Simulated physical button click.")
+                
+                if not pet.hub.connected_state:
+                    pet.add_log("Error: WeDo Smarthub disconnected!")
+                    break
+                    
+                live.update(make_layout(pet, hub_type))
+    finally:
+        set_terminal_raw(False)
+        
     console.clear()
 
 
