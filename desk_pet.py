@@ -459,6 +459,10 @@ class DeskPet:
         # Triple press history
         self.button_releases = []
 
+        # Trainer Health & sleep covers
+        self.trainer_hp = 100
+        self.sleep_cover_start = 0.0
+
         # Load state from file (if exists)
         self.load_state()
 
@@ -491,7 +495,8 @@ class DeskPet:
                 "xp": self.xp,
                 "energy": self.energy,
                 "happiness": self.happiness,
-                "hunger": self.hunger
+                "hunger": self.hunger,
+                "trainer_hp": self.trainer_hp
             }
             with open(self.get_state_file_path(), "w") as f:
                 json.dump(state, f)
@@ -508,9 +513,12 @@ class DeskPet:
                     self.profile = state.get("profile", self.profile)
                     self.level = state.get("level", self.level)
                     self.xp = state.get("xp", self.xp)
+
                     self.energy = state.get("energy", self.energy)
                     self.happiness = state.get("happiness", self.happiness)
                     self.hunger = state.get("hunger", self.hunger)
+                    self.trainer_hp = state.get("trainer_hp", self.trainer_hp)
+
             except Exception as e:
                 self.add_log(f"Error loading state: {e}")
 
@@ -1110,9 +1118,62 @@ class DeskPet:
                     threading.Thread(target=self.trigger_rickroll, daemon=True).start()
             last_button_state = btn
 
-
+            # Startle Attack Easter Egg (Cover proximity sensor <= 1cm for 4 seconds while sleeping)
+            if self.mood == "sleeping":
+                if dist <= 1:
+                    if self.sleep_cover_start == 0.0:
+                        self.sleep_cover_start = time.time()
+                    else:
+                        elapsed = time.time() - self.sleep_cover_start
+                        if elapsed > 4.0:
+                            self.sleep_cover_start = 0.0
+                            self.mood = "awake"
+                            self.trainer_hp = max(0, self.trainer_hp - 20)
+                            self.add_log(f"[Startled Attack] ⚡ {self.pet_name} was startled awake! He snaps at you! Trainer HP -20! ⚡")
+                            
+                            def run_startle_attack():
+                                # Loud startle screech sound and flash red
+                                for _ in range(4):
+                                    try:
+                                        self.hub.set_led("red")
+                                        self.hub.beep(1600, 100)
+                                        time.sleep(0.05)
+                                        self.hub.beep(1200, 100)
+                                        time.sleep(0.05)
+                                    except Exception:
+                                        pass
+                                
+                                # If trainer faints
+                                if self.trainer_hp <= 0:
+                                    self.add_log(f"[Fainted] Trainer fainted! {self.pet_name} whines guiltily and licks your hand. Trainer HP restored.")
+                                    self.trainer_hp = 100
+                                    # Licking animation
+                                    self.mood = "happy"
+                                    for _ in range(3):
+                                        try:
+                                            self.hub.set_led("green")
+                                            self.hub.set_motor(35)
+                                            self.hub.beep(600, 150)
+                                            time.sleep(0.2)
+                                            self.hub.set_motor(-35)
+                                            self.hub.beep(800, 150)
+                                            time.sleep(0.2)
+                                        except Exception:
+                                            pass
+                                    try:
+                                        self.hub.stop_motor()
+                                    except Exception:
+                                        pass
+                                self.mood = "awake"
+                                self.save_state()
+                            threading.Thread(target=run_startle_attack, daemon=True).start()
+                else:
+                    self.sleep_cover_start = 0.0
+            else:
+                self.sleep_cover_start = 0.0
 
             if self.screaming_for_food:
+
                 elapsed = time.time() - self.screaming_cycle_start
                 if elapsed < 3.0:
                     # Red Phase (Too Early)
@@ -1402,6 +1463,8 @@ def make_layout(pet, hub_type) -> Layout:
     status_table.add_row("Distance: ", distance_str)
     status_table.add_row("Tilt: ", tilt_str)
     status_table.add_row("AI Autopilot: ", ai_status)
+    status_table.add_row("Trainer HP: ", make_progress_bar(pet.trainer_hp, "#FF1744" if pet.trainer_hp < 40 else "#00E676"))
+
 
 
     face_panel = Panel(
