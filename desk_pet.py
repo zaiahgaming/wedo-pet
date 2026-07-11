@@ -157,16 +157,17 @@ def read_key():
             if ch == '\x03':
                 raise KeyboardInterrupt()
             if ch == '\x1b':
-                time.sleep(0.05)
-                r, _, _ = select.select([sys.stdin], [], [], 0)
-                if r:
+                r_esc, _, _ = select.select([sys.stdin], [], [], 0.05)
+                if r_esc:
                     ch2 = sys.stdin.read(1)
                     if ch2 == '[':
-                        ch3 = sys.stdin.read(1)
-                        if ch3 == 'A': return "up"
-                        if ch3 == 'B': return "down"
-                        if ch3 == 'C': return "right"
-                        if ch3 == 'D': return "left"
+                        r_seq, _, _ = select.select([sys.stdin], [], [], 0.05)
+                        if r_seq:
+                            ch3 = sys.stdin.read(1)
+                            if ch3 == 'A': return "up"
+                            if ch3 == 'B': return "down"
+                            if ch3 == 'C': return "right"
+                            if ch3 == 'D': return "left"
                 return "escape"
             if ch == '\r' or ch == '\n': return "enter"
             return ch.lower()
