@@ -435,7 +435,10 @@ class DeskPet:
         # Profile settings (Puppy default)
         self.profile = "Puppy"
         self.pet_name = "Kepler"
-
+        
+        # Leveling & XP
+        self.level = 1
+        self.xp = 0
         
         self.logs = []
         self.log_lock = threading.Lock()
@@ -445,6 +448,13 @@ class DeskPet:
         # Tail wagging properties
         self.tail_active = False
         
+        # Ollama Autopilot Mode
+        self.ai_autopilot = False
+        self.last_ai_trigger_time = 0.0
+
+        # Load state from file (if exists)
+        self.load_state()
+
         self.add_log(f"Pet {self.pet_name} initialized. Welcome!")
 
         # Start autonomous behavior thread
@@ -457,6 +467,255 @@ class DeskPet:
             self.logs.append(f"[{timestamp}] {msg}")
             if len(self.logs) > 30:
                 self.logs.pop(0)
+
+    # -------------------------------------------------------------
+    # State Persistence (Save/Load)
+    # -------------------------------------------------------------
+    def get_state_file_path(self):
+        return os.path.expanduser("~/.wedo_pet_state.json")
+
+    def save_state(self):
+        try:
+            state = {
+                "pet_name": self.pet_name,
+                "profile": self.profile,
+                "level": self.level,
+                "xp": self.xp,
+                "energy": self.energy,
+                "happiness": self.happiness,
+                "hunger": self.hunger
+            }
+            with open(self.get_state_file_path(), "w") as f:
+                json.dump(state, f)
+        except Exception as e:
+            self.add_log(f"Error saving state: {e}")
+
+    def load_state(self):
+        path = self.get_state_file_path()
+        if os.path.exists(path):
+            try:
+                with open(path, "r") as f:
+                    state = json.load(f)
+                    self.pet_name = state.get("pet_name", self.pet_name)
+                    self.profile = state.get("profile", self.profile)
+                    self.level = state.get("level", self.level)
+                    self.xp = state.get("xp", self.xp)
+                    self.energy = state.get("energy", self.energy)
+                    self.happiness = state.get("happiness", self.happiness)
+                    self.hunger = state.get("hunger", self.hunger)
+            except Exception as e:
+                self.add_log(f"Error loading state: {e}")
+
+    # -------------------------------------------------------------
+    # Leveling & XP System
+    # -------------------------------------------------------------
+    def get_level_title(self):
+        titles = {
+            1: "Newborn 🥚",
+            2: "Toddler 🐾",
+            3: "Explorer 🧭",
+            4: "Companion 🤝",
+            5: "Super Pet ⚡",
+            6: "Legend 🌟"
+        }
+        return titles.get(self.level, "Ultimate Cosmic Companion 🌌")
+
+    def gain_xp(self, amount):
+        self.xp += amount
+        if self.xp < 0:
+            self.xp = 0
+        xp_needed = self.level * 100
+        if self.xp >= xp_needed:
+            self.level_up()
+        else:
+            self.save_state()
+
+    def level_up(self):
+        xp_needed = self.level * 100
+        self.xp = max(0, self.xp - xp_needed)
+        self.level += 1
+        self.add_log(f"★ LEVEL UP! ★ {self.pet_name} reached Level {self.level} ({self.get_level_title()})!")
+        
+        # Ascending chime beeps
+        def play_level_chimes():
+            chimes = [440, 554, 659, 880]
+            for tone in chimes:
+                try:
+                    self.hub.beep(tone, 150)
+                except Exception:
+                    pass
+                time.sleep(0.08)
+        threading.Thread(target=play_level_chimes, daemon=True).start()
+        self.save_state()
+
+    # -------------------------------------------------------------
+    # Ollama AI Autopilot & Chat Integration
+    # -------------------------------------------------------------
+    def query_ollama(self, prompt):
+        import urllib.request
+        
+        url = "http://localhost:11434/api/generate"
+        system_rules = (
+            "You are the brain of an interactive desk pet robot built with LEGO WeDo 2.0.\n"
+            f"Your name is {self.pet_name} and you are a {self.profile}.\n"
+            "You respond to user chat messages or sensor events. You must respond ONLY with a valid JSON object matching exactly this schema:\n"
+            "{\n"
+            "  \"thought\": \"Brief internal thought (max 10 words)\",\n"
+            "  \"speech\": \"Cute sound words or conversational response (max 40 words)\",\n"
+            "  \"emotion\": \"awake|sleeping|happy|angry|dizzy|eating|singing\",\n"
+            "  \"color\": \"red|green|blue|yellow|purple|cyan|white|off\",\n"
+            "  \"sound\": [[frequency_hz, duration_ms], ...],\n"
+            "  \"motor_speed\": -100 to 100,\n"
+            "  \"motor_duration_ms\": 0 to 2000,\n"
+            "  \"vm_code\": \"Optional valid Python code block to execute manually if you want complex movements. Otherwise leave null.\"\n"
+            "}\n"
+            "Available API in vm_code:\n"
+            "- import time; time.sleep(sec)\n"
+            "- import lights; lights.set_color(color_name)\n"
+            "- import sound; sound.beep(freq, duration_ms)\n"
+            "- import motor; motor.run(speed); motor.stop(); motor.brake()\n"
+            "- import sensors; sensors.get_distance() -> returns 0-10 cm; sensors.get_tilt() -> returns Neutral|Left|Right|Forward|Backward|Unknown\n"
+            "Respond ONLY with the JSON object. Do not include markdown formatting or extra text outside the JSON."
+        )
+        
+        payload = {
+            "model": "qwen2.5:3b",
+            "system": system_rules,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json"
+        }
+        
+        try:
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                content = data.get("response", "{}")
+                return json.loads(content)
+        except Exception as e:
+            self.add_log(f"[AI Connect Error] {e}")
+            return None
+
+    def execute_llm_code(self, code):
+        import io
+        import contextlib
+
+        # Sanitize markdown formatting
+        if code.strip().startswith("```"):
+            lines = code.strip().splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].startswith("```"):
+                lines = lines[:-1]
+            code = "\n".join(lines)
+
+        class Lights:
+            def __init__(self, hub): self.hub = hub
+            def set_color(self, c): self.hub.set_led(c)
+            def set_led_rgb(self, r, g, b): self.hub.set_led_rgb(r, g, b)
+
+        class Sound:
+            def __init__(self, hub): self.hub = hub
+            def beep(self, f, d):
+                self.hub.beep(f, d)
+                time.sleep(d / 1000.0)
+
+        class Motor:
+            def __init__(self, hub): self.hub = hub
+            def run(self, speed): self.hub.set_motor(speed)
+            def stop(self): self.hub.stop_motor()
+            def brake(self): self.hub.stop_motor()
+
+        class Sensors:
+            def __init__(self, hub): self.hub = hub
+            def get_distance(self):
+                dist_p = self.hub.check_connected("Distance Sensor")
+                return self.hub.sensor_cache[dist_p]["distance"] if dist_p else 10
+            def get_tilt(self):
+                tilt_p = self.hub.check_connected("Tilt Sensor")
+                return self.hub.sensor_cache[tilt_p]["tilt"] if tilt_p else "Neutral"
+            def get_battery(self):
+                return self.hub.get_battery_level()
+
+        lights_mock = Lights(self.hub)
+        sound_mock = Sound(self.hub)
+        motor_mock = Motor(self.hub)
+        sensors_mock = Sensors(self.hub)
+
+        safe_globals = {
+            "__builtins__": __builtins__,
+            "math": __import__("math"),
+            "random": __import__("random"),
+            "time": __import__("time"),
+            "sys": __import__("sys"),
+            "lights": lights_mock,
+            "sound": sound_mock,
+            "motor": motor_mock,
+            "sensors": sensors_mock
+        }
+
+        try:
+            f = io.StringIO()
+            with contextlib.redirect_stdout(f):
+                exec(code, safe_globals)
+            out = f.getvalue().strip()
+            if out:
+                self.add_log(f"[Code Output] {out}")
+        except Exception as e:
+            self.add_log(f"[Code Error] {e}")
+
+    def handle_ollama_response(self, response):
+        if not response:
+            return
+            
+        thought = response.get("thought", "Calculating...")
+        speech = response.get("speech", "Beep boop!")
+        emotion = response.get("emotion", "awake")
+        color = response.get("color", "green")
+        sound = response.get("sound", [])
+        motor_speed = response.get("motor_speed", 0)
+        motor_duration = response.get("motor_duration_ms", 0)
+        vm_code = response.get("vm_code")
+        
+        self.mood = emotion
+        self.add_log(f"[Brain: {thought}] \"{speech}\"")
+        
+        # LED Color
+        try:
+            self.hub.set_led(color)
+        except Exception:
+            pass
+            
+        # Beep Sound Array
+        if sound:
+            def play_sounds():
+                for freq, dur in sound:
+                    try:
+                        self.hub.beep(freq, dur)
+                    except Exception:
+                        pass
+                    time.sleep(dur / 1000.0 + 0.05)
+            threading.Thread(target=play_sounds, daemon=True).start()
+            
+        # Motor Action duration
+        if motor_speed != 0 and motor_duration > 0:
+            def run_motor():
+                try:
+                    self.hub.set_motor(motor_speed)
+                    time.sleep(motor_duration / 1000.0)
+                    self.hub.stop_motor()
+                except Exception:
+                    pass
+            threading.Thread(target=run_motor, daemon=True).start()
+            
+        # Optional custom synthesized guest Python script
+        if vm_code:
+            threading.Thread(target=self.execute_llm_code, args=(vm_code,), daemon=True).start()
 
     def change_profile(self, name):
         profiles = {
@@ -471,6 +730,7 @@ class DeskPet:
             self.add_log(f"Profile switched to {name} ({self.pet_name}). {greeting}")
             # Quick beep to signal change
             self.hub.beep(600 if name == "Puppy" else (800 if name == "Kitten" else (400 if name == "Robot" else 200)), 150)
+            self.save_state()
 
     def get_face(self):
         # Return animated ASCII Art Face based on current profile, mood, and frame
@@ -580,6 +840,9 @@ class DeskPet:
         self.hub.stop_motor()
         self.mood = "awake"
         self.add_log(f"{self.pet_name} finished eating. Munch munch!")
+        
+        # Gain XP on interaction
+        self.gain_xp(30)
 
     def interact_pet(self):
         self.mood = "happy"
@@ -598,6 +861,9 @@ class DeskPet:
             
         self.hub.stop_motor()
         self.mood = "awake"
+        
+        # Gain XP on interaction
+        self.gain_xp(20)
 
     def interact_poke(self):
         self.mood = "angry"
@@ -615,6 +881,9 @@ class DeskPet:
             
         self.hub.stop_motor()
         self.mood = "awake"
+        
+        # Lose XP on negative interaction
+        self.gain_xp(-5)
 
     def play_midi(self, filename, query=None, selected_song_dict=None):
         if self.music_playing:
@@ -678,6 +947,8 @@ class DeskPet:
                 self.music_playing = False
                 self.mood = "awake"
                 self.add_log("Music playback completed.")
+                self.gain_xp(40)
+
 
         threading.Thread(target=run_music, daemon=True).start()
 
@@ -695,17 +966,10 @@ class DeskPet:
             self.frame = (self.frame + 1) % 100
             time.sleep(0.2)
 
-            
-            # Skip autonomous state checks if pet is currently performing a user command
-            if self.mood in ["eating", "singing"] or self.music_playing:
-                last_activity_time = time.time()
-                continue
-                
             # Get latest sensor values from hub
             dist = 10
             tilt = "Neutral"
             
-            # Search connected ports for sensors
             dist_port = self.hub.check_connected("Distance Sensor")
             tilt_port = self.hub.check_connected("Tilt Sensor")
             
@@ -713,6 +977,36 @@ class DeskPet:
                 dist = self.hub.sensor_cache[dist_port]["distance"]
             if tilt_port:
                 tilt = self.hub.sensor_cache[tilt_port]["tilt"]
+                
+            current_time = time.time()
+            
+            # Check for AI Autopilot sensor events
+            if self.ai_autopilot and not self.music_playing and (current_time - self.last_ai_trigger_time > 12.0):
+                # Trigger on distance sensor change (approaching close range)
+                if dist < 5 and (not recent_distances or recent_distances[-1] >= 5):
+                    self.last_ai_trigger_time = current_time
+                    self.add_log(f"[AI Autopilot] Proximity sensor triggered at {dist} cm")
+                    
+                    def run_ai_dist():
+                        res = self.query_ollama(f"Sensor Trigger: A user approached very close to you! Distance: {dist} cm. Express your reaction in thought, speech, beeps, and motor speed.")
+                        self.handle_ollama_response(res)
+                    threading.Thread(target=run_ai_dist, daemon=True).start()
+                    
+                # Trigger on tilt change
+                elif tilt != "Neutral" and last_tilt == "Neutral":
+                    self.last_ai_trigger_time = current_time
+                    self.add_log(f"[AI Autopilot] Tilt sensor triggered: {tilt}")
+                    
+                    def run_ai_tilt():
+                        res = self.query_ollama(f"Sensor Trigger: You were tilted in direction: {tilt}. Respond in character with custom color, speech, and python code in 'vm_code' if needed.")
+                        self.handle_ollama_response(res)
+                    threading.Thread(target=run_ai_tilt, daemon=True).start()
+
+            # Skip autonomous state checks if pet is currently performing a user command
+            if self.mood in ["eating", "singing"] or self.music_playing:
+                last_activity_time = current_time
+                continue
+
                 
             # 1. Energy, Hunger & Happiness Drain
             current_time = time.time()
@@ -890,16 +1184,24 @@ def make_layout(pet, hub_type) -> Layout:
     else:
         tilt_str = "[#888888]Not Connected[/#888888]"
 
+    xp_needed = pet.level * 100
+    xp_pct = min(100, max(0, int((pet.xp / xp_needed) * 100)))
+    ai_status = "[bold #00E676]ON[/bold #00E676]" if pet.ai_autopilot else "[bold #FF1744]OFF[/bold #FF1744]"
+
     status_table = Table.grid(padding=(0, 2))
     status_table.add_column(style="#00BBFF", justify="right")
     status_table.add_column(style="white")
     status_table.add_row("Profile: ", f"[bold #9B5DE5]{pet.profile}[/bold #9B5DE5] ({pet.pet_name})")
+    status_table.add_row("Level: ", f"[bold #FFD600]{pet.level}[/bold #FFD600] ({pet.get_level_title()})")
+    status_table.add_row("XP: ", make_progress_bar(xp_pct, "#9B5DE5") + f" [dim]{pet.xp}/{xp_needed} XP[/dim]")
     status_table.add_row("State/Mood: ", f"[bold #F15BB5]{pet.mood.upper()}[/bold #F15BB5]")
     status_table.add_row("Energy: ", make_progress_bar(pet.energy, e_color))
     status_table.add_row("Happiness: ", make_progress_bar(pet.happiness, h_color))
     status_table.add_row("Hunger: ", make_progress_bar(pet.hunger, hu_color))
     status_table.add_row("Distance: ", distance_str)
     status_table.add_row("Tilt: ", tilt_str)
+    status_table.add_row("AI Autopilot: ", ai_status)
+
 
     face_panel = Panel(
         Align.center(Text(f"\n\n  {face_art}  \n\n", style="bold #FFD600", justify="center")),
@@ -984,8 +1286,29 @@ def print_main_menu(pet):
     table.add_row("[7]", "Tuning & Manual Hardware Overrides", "[Control motor speed, light colors, or beep]")
     table.add_row("[8]", "Change Pet Profile", f"[Current: {pet.profile}]")
     table.add_row("[9]", "Hub Status & Telemetry Summary", "[Quick diagnostic output]")
+    table.add_row("[a]", "Toggle Ollama AI Autopilot Mode", f"[Currently: {'ON' if pet.ai_autopilot else 'OFF'}]")
+    table.add_row("[c]", "Chat with Pet (Ollama AI)", "[Query your local qwen2.5:3b model]")
     table.add_row("[0]", "Exit", "[Gracefully disconnect and close]")
     console.print(table)
+
+def handle_chat_mode(pet):
+    console.print("\n--- 💬 Chat with your Pet (Ollama AI) ---", style="bold green")
+    console.print("Type your message and press Enter. Type 'exit' to return to menu.\n")
+    while True:
+        msg = console.input(f"[bold green]You to {pet.pet_name}: [/bold green]").strip()
+        if not msg or msg.lower() == 'exit':
+            break
+        
+        console.print(f"[cyan]Connecting to {pet.pet_name}'s brain...[/cyan]")
+        res = pet.query_ollama(msg)
+        if res:
+            pet.handle_ollama_response(res)
+            # Print response in terminal
+            console.print(f"[bold yellow]{pet.pet_name}[/bold yellow] says: [bold]\"{res.get('speech')}\"[/bold]")
+            console.print(f"[dim]Thought: ({res.get('thought')})[/dim]\n")
+        else:
+            console.print("[red]Could not connect to Ollama. Is the service running?[/red]\n")
+
 
 def handle_music_center(pet):
     console.print("\n--- ♫ WeDo Music Center ♫ ---", style="bold magenta")
@@ -1190,7 +1513,7 @@ def main():
     try:
         while pet.is_running:
             print_main_menu(pet)
-            choice = console.input("[bold green]Choose an action (0-9): [/bold green]").strip()
+            choice = console.input("[bold green]Choose an action (0-9, a, c): [/bold green]").strip().lower()
 
             if choice == "1":
                 run_live_dashboard(pet, hub_type)
@@ -1228,12 +1551,20 @@ def main():
                 console.print(f"Tilt Sensor: {tilt_str}")
                 console.print(f"Pet State: Mood: {pet.mood}, Energy: {pet.energy}, Hunger: {pet.hunger}, Happiness: {pet.happiness}")
                 console.input("\nPress Enter to continue...")
+            elif choice == "a":
+                pet.ai_autopilot = not pet.ai_autopilot
+                pet.add_log(f"AI Autopilot mode set to {pet.ai_autopilot}")
+                console.print(f"[green]AI Autopilot mode set to: {'ON' if pet.ai_autopilot else 'OFF'}[/green]")
+                time.sleep(1.0)
+            elif choice == "c":
+                handle_chat_mode(pet)
             elif choice == "0":
                 console.print("[cyan]Disconnecting from LEGO Smarthub...[/cyan]")
                 break
             else:
-                console.print("[red]Invalid selection. Please choose a number from 0 to 9.[/red]")
+                console.print("[red]Invalid selection. Please choose a valid action.[/red]")
                 time.sleep(0.8)
+
                 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user. Exiting cleanly...[/yellow]")
