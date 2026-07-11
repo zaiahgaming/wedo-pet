@@ -1729,6 +1729,9 @@ def run_live_dashboard(pet, hub_type):
 # -----------------------------------------------------------------
 def print_main_menu(pet):
     table = Table(title=f"🐾 WeDo 2.0 Desk Pet: {pet.pet_name} Main Menu 🐾", show_header=False, border_style="green")
+    table.add_column(markup=False)
+    table.add_column(markup=True)
+    table.add_column(markup=True)
     table.add_row("[1]", "Enter Live Dashboard Mode", "[Show live ASCII pet, sensors, and logs]")
     table.add_row("[2]", "Feed Pet", "[Give cookie, reduce hunger, increase energy]")
     table.add_row("[3]", "Pet the Pet", "[Wag tail, flash lights, make happy]")
@@ -1738,15 +1741,16 @@ def print_main_menu(pet):
     table.add_row("[7]", "Tuning & Manual Hardware Overrides", "[Control motor speed, light colors, or beep]")
     table.add_row("[8]", "Change Pet Profile", f"[Current: {pet.profile}]")
     table.add_row("[9]", "Hub Status & Telemetry Summary", "[Quick diagnostic output]")
-    table.add_row(Text("[g]"), "Play Games & Live Tutorial", "[Obstacle Course, Simon Says, and interactive guides]")
-    table.add_row(Text("[o]"), "Ollama Local LLM Setup Helper", "[Install Ollama or pull qwen2.5:3b model]")
-    table.add_row(Text("[a]"), "Toggle Ollama AI Autopilot Mode", f"[Currently: {'ON' if pet.ai_autopilot else 'OFF'}]")
-    table.add_row(Text("[c]"), "Chat with Pet (Ollama AI)", "[Query your local qwen2.5:3b model]")
-    table.add_row(Text("[t]"), "User Training & Manual", "[Explanatory guide for UI layouts and sounds]")
+    table.add_row("[g]", "Play Games & Live Tutorial", "[Obstacle Course, Simon Says, and interactive guides]")
+    table.add_row("[o]", "Ollama Local LLM Setup Helper", "[Install Ollama or pull qwen2.5:3b model]")
+    table.add_row("[a]", "Toggle Ollama AI Autopilot Mode", f"[Currently: {'ON' if pet.ai_autopilot else 'OFF'}]")
+    table.add_row("[c]", "Chat with Pet (Ollama AI)", "[Query your local qwen2.5:3b model]")
+    table.add_row("[t]", "User Training & Manual", "[Explanatory guide for UI layouts and sounds]")
     if "(MOCK)" in pet.hub.hub_name:
-        table.add_row(Text("[b]"), "Simulate Hub Button Click", "[Simulate physical button press for feeding challenge]")
+        table.add_row("[b]", "Simulate Hub Button Click", "[Simulate physical button press for feeding challenge]")
     table.add_row("[0]", "Exit", "[Gracefully disconnect and close]")
     console.print(table)
+
 
 
 def handle_training_manual():
@@ -2550,6 +2554,7 @@ def main():
     # Main Interactive CLI Command Loop
     try:
         while pet.is_running:
+            console.clear()
             print_main_menu(pet)
             choice = console.input("[bold green]Choose an action (0-9, a, c, b, g, o, t): [/bold green]").strip().lower()
 
@@ -2613,7 +2618,7 @@ def main():
                 time.sleep(0.6)
 
 
-            elif choice == "0":
+            elif choice == "0" or choice == "q":
                 console.print("[cyan]Disconnecting from LEGO Smarthub...[/cyan]")
                 break
             else:
