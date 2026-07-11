@@ -1979,7 +1979,7 @@ class DeskPet:
                     
                     consecutive_matches = 0
                     start_t = time.time()
-                    while time.time() - start_t < 25.0 and consecutive_matches < 4:
+                    while time.time() - start_t < 15.0 and consecutive_matches < 2:
                         dist = 10
                         dist_p = self.hub.check_connected("Distance Sensor")
                         if dist_p:
@@ -2017,7 +2017,7 @@ class DeskPet:
                                     time.sleep(0.8)
                                     
                     self.hub.stop_motor()
-                    if consecutive_matches >= 4:
+                    if consecutive_matches >= 2:
                         self.hub.set_led("green")
                         for _ in range(3):
                             self.hub.stop_motor()
@@ -2038,7 +2038,7 @@ class DeskPet:
                         
                 elif game_id == "tail_counter":
                     self.add_log(f"[Background Game] INSTRUCTIONS: Watch {self.pet_name} wag his tail. Count the wags, then wave your hand under the distance sensor exactly that many times to answer!")
-                    secret_count = random.randint(1, 4)
+                    secret_count = random.randint(1, 2)
                     self.hub.set_led("purple")
                     self.hub.beep(600, 150)
                     time.sleep(0.8)
@@ -2058,7 +2058,7 @@ class DeskPet:
                     start_t = time.time()
                     last_close = False
                     
-                    while time.time() - start_t < 10.0:
+                    while time.time() - start_t < 6.0:
                         dist = 10
                         dist_p = self.hub.check_connected("Distance Sensor")
                         if dist_p:
@@ -2084,17 +2084,17 @@ class DeskPet:
                         self.add_log(f"[Background Game] 😿 Wrong count! {self.pet_name} counted {secret_count}, you petted {user_count}.")
                         
                 elif game_id == "tug_of_war":
-                    self.add_log(f"[Background Game] INSTRUCTIONS: {self.pet_name}'s motor is pulling! Tilt the Smart Hub Left and Right repeatedly 12 times within 12 seconds to pull back!")
+                    self.add_log(f"[Background Game] INSTRUCTIONS: {self.pet_name}'s motor is pulling! Tilt the Smart Hub Left and Right repeatedly 4 times within 6 seconds to pull back!")
                     self.hub.set_led("cyan")
                     self.hub.beep(700, 150)
                     time.sleep(0.5)
                     
-                    target_pulls = 12
+                    target_pulls = 4
                     pulls_done = 0
                     start_t = time.time()
                     last_tilt = "Neutral"
                     
-                    while time.time() - start_t < 12.0 and pulls_done < target_pulls:
+                    while time.time() - start_t < 6.0 and pulls_done < target_pulls:
                         elapsed = time.time() - start_t
                         self.hub.set_motor(60 if int(elapsed * 4) % 2 == 0 else -60)
                         
@@ -2128,7 +2128,7 @@ class DeskPet:
                     beep_freqs = {"L": 500, "R": 700, "F": 900, "B": 1100}
                     led_colors = {"L": "blue", "R": "orange", "F": "green", "B": "red"}
                     
-                    seq = [random.choice(directions) for _ in range(3)]
+                    seq = [random.choice(directions) for _ in range(2)]
                     for direction in seq:
                         self.hub.set_led(led_colors[direction])
                         self.hub.beep(beep_freqs[direction], 450)
@@ -2140,7 +2140,7 @@ class DeskPet:
                     user_seq = []
                     success = True
                     
-                    for step in range(3):
+                    for step in range(2):
                         action = None
                         start_step = time.time()
                         while action is None and time.time() - start_step < 5.0:
@@ -2175,7 +2175,7 @@ class DeskPet:
                     time.sleep(0.4)
                     
                     start_t = time.time()
-                    while time.time() - start_t < 15.0:
+                    while time.time() - start_t < 8.0:
                         dist = 10
                         dist_p = self.hub.check_connected("Distance Sensor")
                         if dist_p:
@@ -2440,9 +2440,23 @@ class DeskPet:
                         self.interact_feed()
                         time.sleep(0.4)  # debounce
                 else:
-                    # Reset cycle
-                    self.add_log(f"[Scream Cycle Reset] Green light window missed!")
-                    self.screaming_cycle_start = time.time()
+                    self.screaming_rounds = getattr(self, "screaming_rounds", 0) + 1
+                    if self.screaming_rounds >= 2:
+                        self.add_log(f"[Auto Feed] {self.pet_name} got tired of screaming and found a leftover snack.")
+                        self.screaming_for_food = False
+                        self.screaming_rounds = 0
+                        # Feed pet default values (same as free cookie)
+                        self.hunger = max(0, self.hunger - 25)
+                        self.energy = min(100, self.energy + 15)
+                        self.happiness = min(100, self.happiness + 10)
+                        try:
+                            self.hub.set_led("green")
+                            self.hub.beep(600, 100)
+                        except Exception:
+                            pass
+                    else:
+                        self.add_log(f"[Scream Cycle Reset] Green light window missed! (Round {self.screaming_rounds}/2)")
+                        self.screaming_cycle_start = time.time()
                 
                 continue
 
