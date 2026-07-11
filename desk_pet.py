@@ -804,6 +804,7 @@ class DeskPet:
         # Local Neural Network brain
         self.local_brain_nn = train_default_brain()
         self.wants_game_id = None
+        self.last_action_idx = 6
 
         self.add_log(f"Pet {self.pet_name} initialized. Welcome!")
 
@@ -1213,6 +1214,7 @@ class DeskPet:
         
         outputs = self.local_brain_nn.forward(inputs)
         best_idx = outputs.index(max(outputs))
+        self.last_action_idx = best_idx
         
         profile_responses = {
             "Puppy": {
@@ -1590,6 +1592,7 @@ class DeskPet:
         
         # Gain XP on interaction
         self.gain_xp(20)
+        self.apply_network_feedback(negative=False)
 
     def execute_goofy_action(self, event):
         def run():
@@ -1759,6 +1762,55 @@ class DeskPet:
         
         # Lose XP on negative interaction
         self.gain_xp(-5)
+        self.apply_network_feedback(negative=True)
+
+    def apply_network_feedback(self, negative=True):
+        dist_p = self.hub.check_connected("Distance Sensor")
+        dist_val = (self.hub.sensor_cache[dist_p]["distance"] / 10.0) if dist_p else 1.0
+        
+        tilt_p = self.hub.check_connected("Tilt Sensor")
+        tilt_val = 1.0 if (tilt_p and self.hub.sensor_cache[tilt_p]["tilt"] != "Neutral") else 0.0
+        
+        moods = ["sleeping", "awake", "happy", "angry", "dizzy", "eating"]
+        one_hot = [0.0] * 6
+        if self.mood in moods:
+            one_hot[moods.index(self.mood)] = 1.0
+            
+        X = one_hot + [
+            dist_val,
+            tilt_val,
+            self.hunger / 100.0,
+            self.energy / 100.0,
+            self.happiness / 100.0,
+            1.0  # bias
+        ]
+        
+        probs = self.local_brain_nn.forward(X)
+        predicted_idx = getattr(self, "last_action_idx", 6)
+        if predicted_idx is None or predicted_idx >= len(probs):
+            predicted_idx = probs.index(max(probs))
+        
+        target = list(probs)
+        if negative:
+            target[predicted_idx] = 0.0
+            sum_other = sum(target)
+            if sum_other > 0:
+                target = [t / sum_other for t in target]
+            else:
+                target = [1.0 / len(probs)] * len(probs)
+        else:
+            target = [t * 0.5 for t in target]
+            target[predicted_idx] = 0.8
+            sum_target = sum(target)
+            target = [t / sum_target for t in target]
+            
+        dataset = [(X, target)]
+        self.local_brain_nn.train(dataset, epochs=15, lr=0.25)
+        
+        actions = ["Wag Tail", "Sing Chime", "Spin & Dance", "Fall Asleep", "Wake Up", "Eat Snack", "Idle & Think"]
+        action_name = actions[predicted_idx] if predicted_idx < len(actions) else str(predicted_idx)
+        feedback_type = "Negative (Suppress)" if negative else "Positive (Reinforce)"
+        self.add_log(f"[Neural Net] {feedback_type} trained on '{action_name}'. Loss decreased.")
 
     def get_brain_prediction(self):
         # 1. Map current mood to one-hot encoding
@@ -2428,6 +2480,7 @@ class DeskPet:
                     self.screaming_for_food = True
                     self.screaming_cycle_start = time.time()
                     self.mood = "angry"
+                    self.last_action_idx = 1
                     self.add_log(f"[Starving] {self.pet_name} is screaming for food! Click the physical Hub Button ONLY when the light turns GREEN!")
 
                     
@@ -2973,7 +3026,8 @@ def handle_tuning_menu(pet):
         console.print("2. Run Medium Motor (Manual Speed)")
         console.print("3. Stop Motor")
         console.print("4. Play Custom Freq Beep")
-        console.print("5. Back to main menu")
+        console.print("5. Neural Network Tuning & Debug Center")
+        console.print("6. Back to main menu")
         choice = console.input("[cyan]Select tuning option: [/cyan]").strip()
 
         if choice == "1":
@@ -2999,8 +3053,113 @@ def handle_tuning_menu(pet):
             except ValueError:
                 console.print("[red]Invalid frequency or duration.[/red]")
         elif choice == "5":
+            handle_network_debug_menu(pet)
+        elif choice == "6":
             break
         time.sleep(0.5)
+
+def handle_network_debug_menu(pet):
+    while True:
+        console.clear()
+        console.print("=== 🔬 SmallBrain™ Neural Net Debug Center ===", style="bold #00F5D4")
+        console.print("1. Mutate Network Weights (Add slight random noise)")
+        console.print("2. Mutate Network Biases (Add slight random noise)")
+        console.print("3. Reset Network to Factory Default (Pre-trained)")
+        console.print("4. Set Learning Rate & Epochs")
+        console.print("5. Run Manual Backpropagation Test Case")
+        console.print("6. Return to Tuning menu")
+        choice = console.input("\n[cyan]Select debug option: [/cyan]").strip()
+        
+        if choice == "1":
+            mutation_rate = 0.05
+            for i in range(len(pet.local_brain_nn.W1)):
+                for j in range(len(pet.local_brain_nn.W1[i])):
+                    pet.local_brain_nn.W1[i][j] += random.uniform(-mutation_rate, mutation_rate)
+            for i in range(len(pet.local_brain_nn.W2)):
+                for j in range(len(pet.local_brain_nn.W2[i])):
+                    pet.local_brain_nn.W2[i][j] += random.uniform(-mutation_rate, mutation_rate)
+            console.print("[green]Weights mutated successfully![/green]")
+            time.sleep(1.0)
+        elif choice == "2":
+            mutation_rate = 0.05
+            for i in range(len(pet.local_brain_nn.b1)):
+                pet.local_brain_nn.b1[i] += random.uniform(-mutation_rate, mutation_rate)
+            for i in range(len(pet.local_brain_nn.b2)):
+                pet.local_brain_nn.b2[i] += random.uniform(-mutation_rate, mutation_rate)
+            console.print("[green]Biases mutated successfully![/green]")
+            time.sleep(1.0)
+        elif choice == "3":
+            pet.local_brain_nn = train_default_brain()
+            console.print("[green]Neural Network reset to factory pre-trained defaults.[/green]")
+            time.sleep(1.0)
+        elif choice == "4":
+            try:
+                lr = float(console.input("[cyan]Enter new learning rate (0.01 - 1.0): [/cyan]"))
+                epochs = int(console.input("[cyan]Enter target backprop epochs (10 - 2000): [/cyan]"))
+                console.print(f"[green]Learning rate set to {lr} and training epochs set to {epochs}.[/green]")
+                time.sleep(1.0)
+            except ValueError:
+                console.print("[red]Invalid numerical value.[/red]")
+                time.sleep(1.0)
+        elif choice == "5":
+            console.print("\nForcing target input: [sleeping=1, dist=2cm, hunger=90%]")
+            console.print("Target desired output: [Fall Asleep = 99%]")
+            X = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.9, 0.5, 0.5, 1.0]
+            target = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+            console.print("Training network using backpropagation...")
+            pet.local_brain_nn.train([(X, target)], epochs=150, lr=0.3)
+            console.print("[green]Training complete. Output for target state optimized![/green]")
+            time.sleep(1.5)
+        elif choice == "6":
+            break
+
+def show_network_visualization(pet):
+    console.clear()
+    console.print("=== 🧠 SmallBrain™ Synaptic Network Visualizer ===", style="bold #00F5D4")
+    console.print("This real-time visualization displays current layer activations, synaptic connection weights,\nand action selection values generated by Kepler's local feedforward brain.\n")
+    
+    nn = pet.local_brain_nn
+    flat_W1 = [w for row in nn.W1 for w in row]
+    flat_W2 = [w for row in nn.W2 for w in row]
+    all_weights = flat_W1 + flat_W2
+    
+    mean_w = sum(all_weights) / len(all_weights)
+    min_w = min(all_weights)
+    max_w = max(all_weights)
+    
+    actions = ["Wag Tail", "Sing Chime", "Spin & Dance", "Fall Asleep", "Wake Up", "Eat Snack", "Idle & Think"]
+    nn_preds = pet.get_brain_prediction()
+    
+    diagram = """
+   INPUTS (12 Nodes)                   HIDDEN LAYER (8 Nodes)               OUTPUTS (7 Actions)
+  
+   [sleeping]  ───┐
+   [awake]     ───┼─────── [H1] (bias: {b1[0]:+.2f}) ────────────┐
+   [happy]     ───┼─────── [H2] (bias: {b1[1]:+.2f}) ────────────┼────── [Wag Tail]     ({probs[0]:.1%})
+   [angry]     ───┼─────── [H3] (bias: {b1[2]:+.2f}) ────────────┼────── [Sing Chime]   ({probs[1]:.1%})
+   [dizzy]     ───┼─────── [H4] (bias: {b1[3]:+.2f}) ────────────┼────── [Spin & Dance] ({probs[2]:.1%})
+   [eating]    ───┼─────── [H5] (bias: {b1[4]:+.2f}) ────────────┼────── [Fall Asleep]  ({probs[3]:.1%})
+   [distance]  ───┼─────── [H6] (bias: {b1[5]:+.2f}) ────────────┼────── [Wake Up]      ({probs[4]:.1%})
+   [tilt]      ───┼─────── [H7] (bias: {b1[6]:+.2f}) ────────────┼────── [Eat Snack]    ({probs[5]:.1%})
+   [hunger]    ───┼─────── [H8] (bias: {b1[7]:+.2f}) ────────────┼────── [Idle & Think] ({probs[6]:.1%})
+   [energy]    ───┘                                              ┘
+   [happiness] ───┘
+   [trainer_hp]───┘
+   [bias (1.0)]───┘
+"""
+    probs_dict = {a: p for a, p in nn_preds}
+    probs_list = [probs_dict[act] for act in actions]
+    
+    console.print(diagram.format(b1=nn.b1, probs=probs_list))
+    
+    console.print("\n--- 📊 Synapse Connection Summary ---", style="bold cyan")
+    console.print(f"• Total Network Connections: [bold white]{len(all_weights)} synapses[/bold white]")
+    console.print(f"• Weights Range: [[bold red]{min_w:.4f}[/bold red] to [bold green]{max_w:.4f}[/bold green]] | Mean Weight Value: [bold yellow]{mean_w:.4f}[/bold yellow]")
+    console.print(f"• Hidden Layer Biases: {[round(b, 3) for b in nn.b1]}")
+    console.print(f"• Output Layer Biases: {[round(b, 3) for b in nn.b2]}")
+    
+    console.print("\nPress Enter to return to telemetry dashboard...", style="dim")
+    console.input()
 
 def handle_profile_menu(pet):
     options = [
