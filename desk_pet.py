@@ -125,23 +125,28 @@ def train_default_brain():
     return brain
 
 
-def read_key():
+def read_key(timeout=10.0):
     if sys.platform.startswith("win"):
         import msvcrt
-        try:
-            ch = msvcrt.getch()
-            if ch in (b'\x00', b'\xe0'):
-                ch2 = msvcrt.getch()
-                if ch2 == b'H': return "up"
-                if ch2 == b'P': return "down"
-                if ch2 == b'K': return "left"
-                if ch2 == b'M': return "right"
-            if ch == b'\r': return "enter"
-            if ch == b'\x1b': return "escape"
-            if ch == b'\x03': raise KeyboardInterrupt()
-            return ch.decode("utf-8").lower()
-        except Exception:
-            return ""
+        start_t = time.time()
+        while time.time() - start_t < timeout:
+            if msvcrt.kbhit():
+                try:
+                    ch = msvcrt.getch()
+                    if ch in (b'\x00', b'\xe0'):
+                        ch2 = msvcrt.getch()
+                        if ch2 == b'H': return "up"
+                        if ch2 == b'P': return "down"
+                        if ch2 == b'K': return "left"
+                        if ch2 == b'M': return "right"
+                    if ch == b'\r': return "enter"
+                    if ch == b'\x1b': return "escape"
+                    if ch == b'\x03': raise KeyboardInterrupt()
+                    return ch.decode("utf-8").lower()
+                except Exception:
+                    return ""
+            time.sleep(0.01)
+        return ""
     else:
         import tty
         import termios
@@ -150,7 +155,7 @@ def read_key():
         old_settings = termios.tcgetattr(fd)
         try:
             tty.setraw(fd)
-            r, _, _ = select.select([fd], [], [], 10.0)
+            r, _, _ = select.select([fd], [], [], timeout)
             if not r:
                 return ""
             ch_bytes = os.read(fd, 1)
@@ -1955,11 +1960,19 @@ def make_layout(pet, hub_type) -> Layout:
 
     # 4. Footer Help Prompt
     footer_text = Text.assemble(
-        ("Press ", "white"),
-        ("[q]", "bold #FF1744"),
-        (" or ", "white"),
-        ("[Enter]", "bold #00E676"),
-        (" to return to the interactive main menu.", "white")
+        ("[f]", "bold #00E676"), (" Feed  ", "white"),
+        ("[p]", "bold #00E676"), (" Pet  ", "white"),
+        ("[k]", "bold #00E676"), (" Poke  ", "white"),
+        ("[s]", "bold #00E676"), (" Sing  ", "white"),
+        ("[m]", "bold #00E676"), (" Music  ", "white"),
+        ("[g]", "bold #00E676"), (" Games  ", "white"),
+        ("[t]", "bold #00E676"), (" Switch Profile  ", "white"),
+        ("[a]", "bold #00E676"), (" Autopilot  ", "white"),
+        ("[c]", "bold #00E676"), (" Chat  ", "white"),
+        ("[o]", "bold #00E676"), (" Ollama  ", "white"),
+        ("[u]", "bold #00E676"), (" Manual  ", "white"),
+        ("[h]", "bold #00E676"), (" Tuning  ", "white"),
+        ("[q]", "bold #FF1744"), (" Exit", "white")
     )
     layout["footer"].update(Panel(Align.center(footer_text), border_style="#FFD600"))
 
@@ -1971,22 +1984,72 @@ def make_layout(pet, hub_type) -> Layout:
 # -----------------------------------------------------------------
 def run_live_dashboard(pet, hub_type):
     console.clear()
-    console.print("[yellow]Starting live dashboard monitoring... (Press q or Enter to stop)[/yellow]")
+    console.print("[yellow]Starting live dashboard monitoring...[/yellow]")
     time.sleep(0.5)
 
     with Live(make_layout(pet, hub_type), refresh_per_second=10, screen=True) as live:
         while pet.is_running:
-            if is_key_pressed():
-                ch = get_key()
-                if ch.lower() in ['q', '\r', '\n']:
-                    break
+            key = read_key(timeout=0.1)
+            
+            if key == "q" or key == "escape":
+                break
+            elif key == "f":
+                pet.interact_feed()
+            elif key == "p":
+                pet.interact_pet()
+            elif key == "k":
+                pet.interact_poke()
+            elif key == "s":
+                scale = [523, 587, 659, 698, 784, 880, 988, 1047]
+                for freq in scale:
+                    pet.hub.beep(freq, 120)
+                    time.sleep(0.08)
+                pet.add_log("Played chime melody.")
+            elif key == "m":
+                live.stop()
+                handle_music_center(pet)
+                live.start()
+            elif key == "g":
+                live.stop()
+                handle_games_menu(pet)
+                live.start()
+            elif key == "t":
+                live.stop()
+                handle_profile_menu(pet)
+                live.start()
+            elif key == "a":
+                pet.ai_autopilot = not pet.ai_autopilot
+                pet.add_log(f"AI Autopilot mode set to {pet.ai_autopilot}")
+            elif key == "c":
+                live.stop()
+                handle_chat_mode(pet)
+                live.start()
+            elif key == "u":
+                live.stop()
+                handle_training_manual()
+                live.start()
+            elif key == "h":
+                live.stop()
+                handle_tuning_menu(pet)
+                live.start()
+            elif key == "o":
+                live.stop()
+                handle_ollama_setup(pet)
+                live.start()
+            elif key == "b" and "(MOCK)" in pet.hub.hub_name:
+                def simulate_click():
+                    pet.hub.button_state = 1
+                    time.sleep(0.5)
+                    pet.hub.button_state = 0
+                threading.Thread(target=simulate_click, daemon=True).start()
+                pet.add_log("Simulated physical button click.")
+
             
             if not pet.hub.connected_state:
                 pet.add_log("Error: WeDo Smarthub disconnected!")
                 break
                 
             live.update(make_layout(pet, hub_type))
-            time.sleep(0.08)
             
     console.clear()
 
@@ -2837,121 +2900,8 @@ def main():
 
 
     # Show initial live dashboard
-    run_live_dashboard(pet, hub_type)
-
-    # Main Interactive CLI Command Loop
     try:
-        selected_idx = 0
-        while pet.is_running:
-            menu_len = 16 if "(MOCK)" in hub.hub_name else 15
-            print_main_menu_interactive(pet, selected_idx)
-            
-            key = read_key()
-            if key == "up":
-                selected_idx = (selected_idx - 1) % menu_len
-                continue
-            elif key == "down":
-                selected_idx = (selected_idx + 1) % menu_len
-                continue
-            elif key == "enter":
-                choice_map = {
-                    0: "1",
-                    1: "2",
-                    2: "3",
-                    3: "4",
-                    4: "5",
-                    5: "6",
-                    6: "7",
-                    7: "8",
-                    8: "9",
-                    9: "g",
-                    10: "o",
-                    11: "a",
-                    12: "c",
-                    13: "t"
-                }
-                if "(MOCK)" in hub.hub_name:
-                    choice_map[14] = "b"
-                    choice_map[15] = "0"
-                else:
-                    choice_map[14] = "0"
-                    
-                choice = choice_map.get(selected_idx, "0")
-            elif key == "q" or key == "escape":
-                choice = "0"
-            else:
-                continue
-
-
-
-            if choice == "1":
-                run_live_dashboard(pet, hub_type)
-            elif choice == "2":
-                pet.interact_feed()
-            elif choice == "3":
-                pet.interact_pet()
-            elif choice == "4":
-                pet.interact_poke()
-            elif choice == "5":
-                console.print("[cyan]Playing chime melody...[/cyan]")
-                scale = [523, 587, 659, 698, 784, 880, 988, 1047]
-                for freq in scale:
-                    hub.beep(freq, 120)
-                    time.sleep(0.08)
-                pet.add_log("Played chime melody.")
-            elif choice == "6":
-                handle_music_center(pet)
-            elif choice == "7":
-                handle_tuning_menu(pet)
-            elif choice == "8":
-                handle_profile_menu(pet)
-            elif choice == "9":
-                dist_p = hub.check_connected("Distance Sensor")
-                tilt_p = hub.check_connected("Tilt Sensor")
-                dist_str = f"{hub.sensor_cache[dist_p]['distance']} cm" if dist_p else "Not Connected"
-                tilt_str = f"{hub.sensor_cache[tilt_p]['tilt']}" if tilt_p else "Not Connected"
-                
-                console.print("\n=== WeDo Smarthub Diagnostics ===", style="bold cyan")
-                console.print(f"Connection Status: {'Connected' if hub.connected_state else 'Disconnected'}")
-                console.print(f"Hub BLE Name: {hub.hub_name}")
-                console.print(f"Battery: {hub.get_battery_level()}%")
-                console.print(f"Connected Ports Data: {hub.port_data}")
-                console.print(f"Distance Sensor: {dist_str}")
-                console.print(f"Tilt Sensor: {tilt_str}")
-                console.print(f"Pet State: Mood: {pet.mood}, Energy: {pet.energy}, Hunger: {pet.hunger}, Happiness: {pet.happiness}")
-                console.input("\nPress Enter to continue...")
-            elif choice == "a":
-                pet.ai_autopilot = not pet.ai_autopilot
-                pet.add_log(f"AI Autopilot mode set to {pet.ai_autopilot}")
-                console.print(f"[green]AI Autopilot mode set to: {'ON' if pet.ai_autopilot else 'OFF'}[/green]")
-                time.sleep(1.0)
-            elif choice == "c":
-                handle_chat_mode(pet)
-            elif choice == "g":
-                handle_games_menu(pet)
-            elif choice == "o":
-                handle_ollama_setup(pet)
-            elif choice == "t":
-                handle_training_manual()
-            elif choice == "b" and "(MOCK)" in hub.hub_name:
-                def simulate_click():
-                    hub.button_state = 1
-                    time.sleep(0.5)
-                    hub.button_state = 0
-                threading.Thread(target=simulate_click, daemon=True).start()
-                console.print("[yellow]Simulating physical button click on WeDo Smarthub...[/yellow]")
-                time.sleep(0.6)
-
-
-            elif choice == "0" or choice == "q":
-                console.print("[cyan]Disconnecting from LEGO Smarthub...[/cyan]")
-                break
-            else:
-                console.print("[red]Invalid selection. Please choose a valid action.[/red]")
-                time.sleep(0.8)
-
-
-                
+        run_live_dashboard(pet, hub_type)
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user. Exiting cleanly...[/yellow]")
     finally:
