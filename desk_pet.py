@@ -2246,15 +2246,10 @@ def create_new_pet_flow():
     
     # 1. Profile select
     profiles = ["Puppy", "Kitten", "Robot", "Penguin"]
-    table = Table(title="Select a Profile", show_header=False)
-    for idx, p in enumerate(profiles):
-        table.add_row(f"[{idx + 1}]", p)
-    console.print(table)
-    
-    profile_choice = ""
-    while profile_choice not in ["1", "2", "3", "4"]:
-        profile_choice = console.input("[cyan]Choose profile (1-4): [/cyan]").strip()
-    profile = profiles[int(profile_choice) - 1]
+    sel = choose_option_interactive("Select a Profile", profiles)
+    if sel == -1:
+        sel = 0
+    profile = profiles[sel]
     
     # Default names
     default_names = {
@@ -2301,6 +2296,7 @@ def create_new_pet_flow():
     except Exception as e:
         console.print(f"[red]Error saving new pet: {e}[/red]")
         
+    state["is_new"] = True
     return state
 
 def delete_pet_flow(files):
@@ -2767,7 +2763,11 @@ def main():
 
     # Select or initialize Pet state
     state_dict = select_or_create_pet()
+    is_new = state_dict.pop("is_new", False)
     pet = DeskPet(hub, state_dict)
+    
+    if is_new:
+        run_interactive_tutorial(pet)
 
 
     # Show initial live dashboard
