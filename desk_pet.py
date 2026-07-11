@@ -614,6 +614,8 @@ class RealWeDo2Hub:
         self.write_raw_output(bytes([0x06, 0x04, 0x03, r, g, b]))
 
     def set_motor(self, speed: int):
+        if getattr(self, "music_playing", False):
+            return
         port = self.check_connected("Motor")
         if not port:
             return
@@ -699,6 +701,8 @@ class MockWeDo2Hub:
         self.current_led = f"RGB({r},{g},{b})"
 
     def set_motor(self, speed: int):
+        if getattr(self, "music_playing", False):
+            return
         self.motor_speed = speed
 
     def stop_motor(self):
@@ -1660,6 +1664,7 @@ class DeskPet:
 
         def run_music():
             self.music_playing = True
+            self.hub.music_playing = True
             self.mood = "singing"
             
             filepath = None
@@ -1710,6 +1715,7 @@ class DeskPet:
             except Exception as e:
                 self.add_log(f"Playback error: {e}")
             finally:
+                self.hub.music_playing = False
                 self.hub.stop_motor()
                 self.hub.set_led("blue" if self.mood == "sleeping" else "green")
                 self.music_playing = False
@@ -3036,6 +3042,7 @@ def run_hide_and_seek_game(pet):
                         console.print(f"🟢 [bold green]ON TARGET! ({dist}cm) Hold it! {2.0 - consecutive_matches * 0.5:.1f}s remaining...[/bold green]     ", end="\r")
                         try:
                             pet.hub.set_led("green")
+                            pet.hub.stop_motor()
                             pet.hub.beep(1200, 100)
                             pet.hub.set_motor(30 if consecutive_matches % 2 == 0 else -30)
                         except Exception:
@@ -3070,11 +3077,13 @@ def run_hide_and_seek_game(pet):
             try:
                 pet.hub.set_led("green")
                 for _ in range(3):
-                    pet.hub.set_motor(60)
+                    pet.hub.stop_motor()
                     pet.hub.beep(880, 80)
+                    pet.hub.set_motor(60)
                     time.sleep(0.1)
-                    pet.hub.set_motor(-60)
+                    pet.hub.stop_motor()
                     pet.hub.beep(1047, 80)
+                    pet.hub.set_motor(-60)
                     time.sleep(0.1)
                 pet.hub.stop_motor()
             except Exception:
@@ -3133,6 +3142,7 @@ def run_speed_petting_game(pet):
             if petted and not last_petted:
                 score += 1
                 try:
+                    pet.hub.stop_motor()
                     pet.hub.beep(800, 50)
                     pet.hub.set_led("purple")
                     pet.hub.set_motor(40 if score % 2 == 0 else -40)
@@ -3195,6 +3205,8 @@ def run_rhythm_matcher_game(pet):
                 try:
                     pet.hub.set_led("orange")
                     pet.hub.set_motor(50)
+                    time.sleep(0.08)
+                    pet.hub.stop_motor()
                     pet.hub.beep(600, 100)
                 except Exception:
                     pass
@@ -3319,6 +3331,7 @@ def run_balance_tail_game(pet):
                 status = "[red]Out of Balance! TILT THE OTHER WAY![/red]"
                 try:
                     pet.hub.set_led("red")
+                    pet.hub.stop_motor()
                     pet.hub.beep(400, 80)
                     pet.hub.set_motor(80 if balance_zone > 0 else -80)
                 except Exception:
@@ -3502,9 +3515,11 @@ def run_code_breaker_game(pet):
             try:
                 pet.hub.set_led("green")
                 for _ in range(4):
-                    pet.hub.set_motor(60)
+                    pet.hub.stop_motor()
                     pet.hub.beep(1000, 100)
+                    pet.hub.set_motor(60)
                     time.sleep(0.1)
+                    pet.hub.stop_motor()
                     pet.hub.set_motor(-60)
                     time.sleep(0.1)
                 pet.hub.stop_motor()
@@ -3655,8 +3670,8 @@ def run_sound_dj_game(pet):
                 
                 try:
                     pet.hub.set_led(color)
+                    pet.hub.stop_motor()
                     pet.hub.beep(int(freq), 120)
-                    pet.hub.set_motor(20 if int(time.time()*6)%2==0 else -20)
                 except Exception:
                     pass
                 time.sleep(0.12)
@@ -3750,11 +3765,13 @@ def run_tilt_maze_game(pet):
         try:
             pet.hub.set_led("green")
             for _ in range(3):
-                pet.hub.set_motor(60)
+                pet.hub.stop_motor()
                 pet.hub.beep(880, 80)
+                pet.hub.set_motor(60)
                 time.sleep(0.08)
-                pet.hub.set_motor(-60)
+                pet.hub.stop_motor()
                 pet.hub.beep(1047, 80)
+                pet.hub.set_motor(-60)
                 time.sleep(0.08)
             pet.hub.stop_motor()
         except Exception:
@@ -3813,6 +3830,7 @@ def run_keep_away_game(pet):
                 score -= 3
                 try:
                     pet.hub.set_led("red")
+                    pet.hub.stop_motor()
                     pet.hub.beep(300, 60)
                 except Exception:
                     pass
