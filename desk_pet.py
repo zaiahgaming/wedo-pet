@@ -800,6 +800,7 @@ class DeskPet:
         # Trainer Health & sleep covers
         self.trainer_hp = state_dict.get("trainer_hp", 100)
         self.sleep_cover_start = 0.0
+        self.coins = state_dict.get("coins", 50)
 
         # Local Neural Network brain
         self.local_brain_nn = train_default_brain()
@@ -1022,7 +1023,8 @@ class DeskPet:
                 "energy": self.energy,
                 "happiness": self.happiness,
                 "hunger": self.hunger,
-                "trainer_hp": self.trainer_hp
+                "trainer_hp": self.trainer_hp,
+                "coins": getattr(self, "coins", 50)
             }
             with open(self.get_state_file_path(), "w") as f:
                 json.dump(state, f)
@@ -1043,6 +1045,7 @@ class DeskPet:
                     self.happiness = state.get("happiness", self.happiness)
                     self.hunger = state.get("hunger", self.hunger)
                     self.trainer_hp = state.get("trainer_hp", self.trainer_hp)
+                    self.coins = state.get("coins", 50)
             except Exception as e:
                 self.add_log(f"Error loading state: {e}")
 
@@ -1066,6 +1069,9 @@ class DeskPet:
 
     def gain_xp(self, amount):
         self.xp += amount
+        if amount > 0:
+            gained_coins = max(1, amount // 2)
+            self.coins += gained_coins
         if self.xp < 0:
             self.xp = 0
         xp_needed = self.get_xp_needed()
@@ -1078,7 +1084,8 @@ class DeskPet:
         xp_needed = self.get_xp_needed()
         self.xp = max(0, self.xp - xp_needed)
         self.level += 1
-        self.add_log(f"★ LEVEL UP! ★ {self.pet_name} reached Level {self.level} ({self.get_level_title()})!")
+        self.coins += 25
+        self.add_log(f"★ LEVEL UP! ★ {self.pet_name} reached Level {self.level} ({self.get_level_title()})! (+25 Coins)")
 
         
         # Ascending chime beeps
@@ -1256,7 +1263,18 @@ class DeskPet:
         }
         
         resp_dict = profile_responses.get(self.profile, profile_responses["Puppy"])
-        thought, speech, emotion, color, sound, motor_speed, motor_duration = resp_dict[best_idx]
+        # Map Neural Network output action indices to profile_responses indices:
+        nn_to_resp = {
+            0: 0, # Wag -> Happy
+            1: 2, # Sing -> Singing
+            2: 4, # Spin & Dance -> Dizzy
+            3: 3, # Fall Asleep -> Sleeping
+            4: 6, # Wake Up -> Waiting/Awake
+            5: 5, # Eat Snack -> Eating
+            6: 6  # Idle -> Waiting
+        }
+        resp_idx = nn_to_resp.get(best_idx, 6)
+        thought, speech, emotion, color, sound, motor_speed, motor_duration = resp_dict[resp_idx]
         
         response = {
             "thought": f"LocalNN: {thought}",
@@ -1542,18 +1560,101 @@ class DeskPet:
 
 
     def interact_feed(self):
+        food_name = "Standard Cookie 🍪"
+        cost = 0
+        hunger_reduction = 30
+        happiness_bonus = 10
+        energy_bonus = 15
+        xp_gained = 30
+        
+        if sys.stdin.isatty() and "unittest" not in sys.modules:
+            set_terminal_raw(False)
+            try:
+                while True:
+                    console.print("\n--- 🛒 Gourmet Desk Pet Food Bakery ---", style="bold #00F5D4")
+                    console.print(f"Your Wallet: [bold yellow]🪙 {getattr(self, 'coins', 50)} Coins[/bold yellow]\n")
+                    console.print("1. 🍪 Standard Cookie    - Cost: Free     | Hunger: -25, Happiness: +10, Energy: +15, XP: +30")
+                    console.print("2. 🐟 Fresh Salmon       - Cost: 10 Coins | Hunger: -50, Happiness: +20, Energy: +15, XP: +40")
+                    console.print("3. 🥩 Prime Ribeye Steak - Cost: 25 Coins | Hunger: -80, Happiness: +35, Energy: +25, XP: +60")
+                    console.print("4. 🍨 Gourmet Sundae     - Cost: 15 Coins | Hunger: -15, Happiness: +50, Energy: +10, XP: +35")
+                    console.print("5. 🌟 Cosmic Star-Candy  - Cost: 50 Coins | Hunger: -40, Happiness: +60, Energy: +30, XP: +120")
+                    console.print("6. Cancel feeding")
+                    
+                    choice = console.input("\n[cyan]What would you like to feed Kepler? (1-6): [/cyan]").strip()
+                    if choice == "1":
+                        food_name = "Standard Cookie 🍪"
+                        cost = 0
+                        hunger_reduction = 25
+                        happiness_bonus = 10
+                        energy_bonus = 15
+                        xp_gained = 30
+                        break
+                    elif choice == "2":
+                        if self.coins >= 10:
+                            food_name = "Fresh Salmon 🐟"
+                            cost = 10
+                            hunger_reduction = 50
+                            happiness_bonus = 20
+                            energy_bonus = 15
+                            xp_gained = 40
+                            break
+                        else:
+                            console.print("[red]Insufficient coins! You cannot afford Fresh Salmon.[/red]")
+                    elif choice == "3":
+                        if self.coins >= 25:
+                            food_name = "Prime Ribeye Steak 🥩"
+                            cost = 25
+                            hunger_reduction = 80
+                            happiness_bonus = 35
+                            energy_bonus = 25
+                            xp_gained = 60
+                            break
+                        else:
+                            console.print("[red]Insufficient coins! You cannot afford Prime Ribeye Steak.[/red]")
+                    elif choice == "4":
+                        if self.coins >= 15:
+                            food_name = "Gourmet Sundae 🍨"
+                            cost = 15
+                            hunger_reduction = 15
+                            happiness_bonus = 50
+                            energy_bonus = 10
+                            xp_gained = 35
+                            break
+                        else:
+                            console.print("[red]Insufficient coins! You cannot afford a Gourmet Sundae.[/red]")
+                    elif choice == "5":
+                        if self.coins >= 50:
+                            food_name = "Cosmic Star-Candy 🌟"
+                            cost = 50
+                            hunger_reduction = 40
+                            happiness_bonus = 60
+                            energy_bonus = 30
+                            xp_gained = 120
+                            break
+                        else:
+                            console.print("[red]Insufficient coins! You cannot afford Cosmic Star-Candy.[/red]")
+                    elif choice == "6":
+                        console.print("[yellow]Feeding cancelled.[/yellow]")
+                        return
+                    else:
+                        console.print("[red]Invalid choice. Select 1 to 6.[/red]")
+            finally:
+                set_terminal_raw(True)
+                
+        self.coins = max(0, self.coins - cost)
+        
         if self.mood == "sleeping":
             self.mood = "awake"
             self.add_log(f"{self.pet_name} woke up hungry!")
         
         self.mood = "eating"
         self.screaming_for_food = False
-        self.add_log(f"Feeding {self.pet_name} a tasty treat...")
+        self.add_log(f"Feeding {self.pet_name} a tasty {food_name}...")
         
         # Interactive chewing animation & sounds
-        self.hunger = max(0, self.hunger - 30)
-        self.energy = min(100, self.energy + 15)
-        self.happiness = min(100, self.happiness + 10)
+        self.hunger = max(0, self.hunger - hunger_reduction)
+        self.energy = min(100, self.energy + energy_bonus)
+        self.happiness = min(100, self.happiness + happiness_bonus)
         
         for i in range(3):
             self.hub.set_led("yellow")
@@ -1564,14 +1665,13 @@ class DeskPet:
             self.hub.set_motor(-60)
             self.hub.beep(300, 150)
             time.sleep(0.15)
-
             
         self.hub.stop_motor()
         self.mood = "awake"
-        self.add_log(f"{self.pet_name} finished eating. Munch munch!")
+        self.add_log(f"{self.pet_name} finished eating {food_name}. Munch munch!")
         
         # Gain XP on interaction
-        self.gain_xp(30)
+        self.gain_xp(xp_gained)
 
     def interact_pet(self):
         self.mood = "happy"
@@ -1596,6 +1696,13 @@ class DeskPet:
         self.apply_network_feedback(negative=False)
 
     def execute_goofy_action(self, event):
+        if any(w in event for w in ["backflip", "order 66", "vacuum", "meaning of life", "JSON"]):
+            self.last_action_idx = 2  # Spin & Dance
+        elif any(w in event for w in ["mothership", "mainframes", "microwave"]):
+            self.last_action_idx = 1  # Sing Chime
+        else:
+            self.last_action_idx = 0  # Wag Tail / Happy
+
         def run():
             if "order 66" in event:
                 self.hub.set_led("red")
@@ -1859,6 +1966,7 @@ class DeskPet:
         def play_game_thread():
             self.mood = "playing_game"
             self.add_log(f"[Background Game] Starting {GAMES_LIST[game_id][0]} headless...")
+            self.add_log("[Background Game] INSTRUCTIONS: Move your hand closer/further from the Distance Sensor to find the target. LED shows Hot (Green), Warm (Yellow/Orange), or Cold (Red). Hold steady when Green!")
             
             try:
                 if game_id == "hide_seek":
@@ -1929,6 +2037,7 @@ class DeskPet:
                         self.add_log(f"[Background Game] 😿 Time's up! Hide & Seek failed.")
                         
                 elif game_id == "tail_counter":
+                    self.add_log("[Background Game] INSTRUCTIONS: Watch Kepler wag his tail. Count the wags, then wave your hand under the distance sensor exactly that many times to answer!")
                     secret_count = random.randint(1, 4)
                     self.hub.set_led("purple")
                     self.hub.beep(600, 150)
@@ -1975,6 +2084,7 @@ class DeskPet:
                         self.add_log(f"[Background Game] 😿 Wrong count! Kepler counted {secret_count}, you petted {user_count}.")
                         
                 elif game_id == "tug_of_war":
+                    self.add_log("[Background Game] INSTRUCTIONS: Kepler's motor is pulling! Tilt the Smart Hub Left and Right repeatedly 12 times within 12 seconds to pull back!")
                     self.hub.set_led("cyan")
                     self.hub.beep(700, 150)
                     time.sleep(0.5)
@@ -2009,6 +2119,7 @@ class DeskPet:
                         self.add_log(f"[Background Game] 😿 Kepler won the Tug-of-War.")
                         
                 elif game_id == "simon_tilt":
+                    self.add_log("[Background Game] INSTRUCTIONS: Watch the LED/sound sequence: Blue=Left, Orange=Right, Green=Forward, Red=Backward. Tilt the Smart Hub in the exact same sequence to answer!")
                     self.hub.set_led("yellow")
                     self.hub.beep(800, 150)
                     time.sleep(0.8)
@@ -2058,6 +2169,7 @@ class DeskPet:
                         self.add_log(f"[Background Game] 😿 Simon Says matched incorrectly.")
                         
                 elif game_id == "dj":
+                    self.add_log("[Background Game] INSTRUCTIONS: Wave your hand near the distance sensor to play sound pitches like a Theremin! Closer = higher pitch, further = lower pitch!")
                     self.hub.set_led("purple")
                     self.hub.beep(900, 200)
                     time.sleep(0.4)
@@ -2442,16 +2554,29 @@ class DeskPet:
                         self.add_log(f"{self.pet_name} wanted to: {event}")
                         self.execute_goofy_action(event)
                         
-                    # Random Headless Game trigger
-                    if random.random() < 0.06 and not self.screaming_for_food and not self.music_playing and self.mood == "awake":
+                    # Neural Net decides if it wants to play a game
+                    nn_preds = self.get_brain_prediction()
+                    best_action, prob = max(nn_preds, key=lambda x: x[1])
+                    
+                    if best_action in ["Wag Tail", "Sing Chime", "Spin & Dance"] and prob > 0.20 and random.random() < 0.12 and not self.screaming_for_food and not self.music_playing and self.mood == "awake":
+                        game_choices = []
+                        if best_action == "Wag Tail":
+                            game_choices = ["tail_counter"]
+                            self.last_action_idx = 0
+                        elif best_action == "Sing Chime":
+                            game_choices = ["dj"]
+                            self.last_action_idx = 1
+                        elif best_action == "Spin & Dance":
+                            game_choices = ["tug_of_war", "hide_seek", "simon_tilt"]
+                            self.last_action_idx = 2
+                            
                         avail = self.get_available_games()
-                        headless_games = ["hide_seek", "tail_counter", "tug_of_war", "simon_tilt", "dj"]
-                        playable_headless = [g for g in avail if g in headless_games]
+                        playable_headless = [g for g in game_choices if g in avail]
                         if playable_headless:
                             chosen = random.choice(playable_headless)
                             self.wants_game_id = chosen
                             game_title = GAMES_LIST[chosen][0]
-                            self.add_log(f"{self.pet_name} wants to play: {game_title}!")
+                            self.add_log(f"[Neural Net] Wants to play: {game_title} (based on active '{best_action}' node, prob={prob:.1%})!")
                             
                             def play_alert():
                                 try:
@@ -2665,6 +2790,7 @@ def make_layout(pet, hub_type) -> Layout:
     status_table.add_column(style="white")
     status_table.add_row("Profile: ", f"[bold #9B5DE5]{pet.profile}[/bold #9B5DE5] ({pet.pet_name})")
     status_table.add_row("Level: ", f"[bold #FFD600]{pet.level}[/bold #FFD600] ({pet.get_level_title()})")
+    status_table.add_row("Coins: ", f"[bold yellow]🪙 {getattr(pet, 'coins', 50)} Coins[/bold yellow]")
     status_table.add_row("XP: ", make_progress_bar(xp_pct, "#9B5DE5") + f" [dim]{pet.xp}/{xp_needed} XP[/dim]")
     status_table.add_row("State/Mood: ", f"[bold #F15BB5]{pet.mood.upper()}[/bold #F15BB5]")
     status_table.add_row("Energy: ", make_progress_bar(pet.energy, e_color))
@@ -3068,7 +3194,8 @@ def handle_network_debug_menu(pet):
         console.print("3. Reset Network to Factory Default (Pre-trained)")
         console.print("4. Set Learning Rate & Epochs")
         console.print("5. Run Manual Backpropagation Test Case")
-        console.print("6. Return to Tuning menu")
+        console.print("6. Launch 3D Synaptic Brain Visualizer (Likes & Dislikes)")
+        console.print("7. Return to Tuning menu")
         choice = console.input("\n[cyan]Select debug option: [/cyan]").strip()
         
         if choice == "1":
@@ -3112,7 +3239,100 @@ def handle_network_debug_menu(pet):
             console.print("[green]Training complete. Output for target state optimized![/green]")
             time.sleep(1.5)
         elif choice == "6":
+            show_3d_network_visualizer(pet)
+        elif choice == "7":
             break
+
+def show_3d_network_visualizer(pet):
+    import math
+    
+    # 3D vertices representing inputs (●), hidden (◆), and outputs (▲)
+    vertices = []
+    
+    # Inputs: 12 nodes circle at z = -1.8
+    for i in range(12):
+        angle = i * (2 * math.pi / 12)
+        vertices.append((math.cos(angle) * 1.4, math.sin(angle) * 1.4, -1.8, "I"))
+        
+    # Hidden: 8 nodes circle at z = 0
+    for i in range(8):
+        angle = i * (2 * math.pi / 8)
+        vertices.append((math.cos(angle) * 1.0, math.sin(angle) * 1.0, 0.0, "H"))
+        
+    # Outputs: 7 nodes circle at z = 1.8
+    for i in range(7):
+        angle = i * (2 * math.pi / 7)
+        vertices.append((math.cos(angle) * 1.2, math.sin(angle) * 1.2, 1.8, "O"))
+        
+    theta = 0.0
+    phi = 0.0
+    
+    set_terminal_raw(True)
+    console.clear()
+    
+    try:
+        while True:
+            key = read_key(timeout=0.03)
+            if key in ["q", "escape", "enter", " "]:
+                break
+                
+            theta += 0.05
+            phi += 0.03
+            
+            width = 40
+            height = 16
+            buffer = [[" " for _ in range(width)] for _ in range(height)]
+            
+            for x, y, z, ltype in vertices:
+                # Rotate Y
+                x1 = x * math.cos(theta) - z * math.sin(theta)
+                z1 = x * math.sin(theta) + z * math.cos(theta)
+                # Rotate X
+                y2 = y * math.cos(phi) - z1 * math.sin(phi)
+                z2 = y * math.sin(phi) + z1 * math.cos(phi)
+                
+                # Projection
+                d = 4.0
+                sx = 16
+                sy = 8
+                px = int(width / 2 + (x1 * sx) / (z2 + d))
+                py = int(height / 2 + (y2 * sy) / (z2 + d))
+                
+                if 0 <= px < width and 0 <= py < height:
+                    char = "●" if ltype == "I" else ("◆" if ltype == "H" else "▲")
+                    buffer[py][px] = char
+                    
+            console.clear()
+            console.print("=== 🔮 SmallBrain™ 3D Synaptic Brain Visualizer ===", style="bold #00F5D4")
+            console.print("Press Q or Enter to return. Showing real-time 3D synaptic layout.\n", style="dim")
+            
+            likes_dislikes = [
+                "[bold #00E676]❤ LIKES & INTERESTS:[/bold #00E676]",
+                " • Petting Kepler (+20 XP, increases Joy)",
+                " • Tasty Snacks (Chewing loops, Hunger -30)",
+                " • Minigames (Tug of War, Dj, Hide & Seek)",
+                " • Positive reinforcement training feedback",
+                "",
+                "[bold #FF1744]💔 DISLIKES & PENALTIES:[/bold #FF1744]",
+                " • Pokes (Triggers negative backprop weight updates)",
+                " • Rapid Smart Hub tilts (causes Dizziness @_@)",
+                " • Empty battery levels or missed feed windows",
+                " • Proximity noise reflections (software-filtered)",
+                "",
+                "[bold #00BBFF]🧬 NEURAL LAYER MAP:[/bold #00BBFF]",
+                " ● Inputs (Connected sensor vitals)",
+                " ◆ Hidden nodes (synapse matrices)",
+                " ▲ Outputs (predicted softmax actions)"
+            ]
+            
+            for row in range(height):
+                canvas = "".join(buffer[row])
+                info = likes_dislikes[row] if row < len(likes_dislikes) else ""
+                console.print(f"   {canvas}   {info}")
+                
+            time.sleep(0.05)
+    finally:
+        set_terminal_raw(False)
 
 def show_network_visualization(pet):
     console.clear()
