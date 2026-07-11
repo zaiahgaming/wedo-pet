@@ -1059,7 +1059,49 @@ class DeskPet:
             self.frame = (self.frame + 1) % 100
             time.sleep(0.2)
 
+            # Get latest sensor values from hub
+            dist = 10
+            tilt = "Neutral"
+            
+            dist_port = self.hub.check_connected("Distance Sensor")
+            tilt_port = self.hub.check_connected("Tilt Sensor")
+            
+            if dist_port:
+                dist = self.hub.sensor_cache[dist_port]["distance"]
+            if tilt_port:
+                tilt = self.hub.sensor_cache[tilt_port]["tilt"]
+
+            # Squirrel Alert Easter Egg (Press button while covering proximity <= 2cm)
             btn = self.hub.button_state
+            if btn == 1 and dist <= 2 and not self.screaming_for_food:
+                self.add_log("[EASTER EGG] 🐿️ SQUIRREL ALERT! Kepler spotted a squirrel! Frantic shaking initiated! 🐿️")
+                self.gain_xp(50)
+                
+                def run_squirrel_alert():
+                    self.mood = "happy"
+                    for _ in range(5):
+                        try:
+                            self.hub.set_led("yellow")
+                            self.hub.set_motor(100)
+                            self.hub.beep(1200, 80)
+                            time.sleep(0.08)
+                            self.hub.set_led("orange")
+                            self.hub.set_motor(-100)
+                            self.hub.beep(1500, 80)
+                            time.sleep(0.08)
+                        except Exception:
+                            pass
+                    try:
+                        self.hub.stop_motor()
+                        self.hub.set_led("green")
+                    except Exception:
+                        pass
+                    self.mood = "awake"
+                threading.Thread(target=run_squirrel_alert, daemon=True).start()
+                time.sleep(1.0)  # debounce
+                btn = 0  # override transition to prevent click trigger
+            
+            # Button release click (Triple click Rickroll)
             if btn == 0 and last_button_state == 1:
                 self.button_releases.append(time.time())
                 self.button_releases = self.button_releases[-3:]
@@ -1067,6 +1109,7 @@ class DeskPet:
                     self.button_releases = []
                     threading.Thread(target=self.trigger_rickroll, daemon=True).start()
             last_button_state = btn
+
 
 
             if self.screaming_for_food:
@@ -1117,19 +1160,8 @@ class DeskPet:
                 continue
 
 
-            # Get latest sensor values from hub
-            dist = 10
-            tilt = "Neutral"
-            
-            dist_port = self.hub.check_connected("Distance Sensor")
-            tilt_port = self.hub.check_connected("Tilt Sensor")
-            
-            if dist_port:
-                dist = self.hub.sensor_cache[dist_port]["distance"]
-            if tilt_port:
-                tilt = self.hub.sensor_cache[tilt_port]["tilt"]
-                
             current_time = time.time()
+
             
             # Check for AI Autopilot sensor events (Active Trigger)
             if self.ai_autopilot and not self.music_playing and (current_time - self.last_ai_trigger_time > 12.0):
@@ -1457,10 +1489,42 @@ def print_main_menu(pet):
     table.add_row("[9]", "Hub Status & Telemetry Summary", "[Quick diagnostic output]")
     table.add_row("[a]", "Toggle Ollama AI Autopilot Mode", f"[Currently: {'ON' if pet.ai_autopilot else 'OFF'}]")
     table.add_row("[c]", "Chat with Pet (Ollama AI)", "[Query your local qwen2.5:3b model]")
+    table.add_row("[t]", "User Training & Manual", "[Explanatory guide for UI layouts and sounds]")
     if "(MOCK)" in pet.hub.hub_name:
         table.add_row("[b]", "Simulate Hub Button Click", "[Simulate physical button press for feeding challenge]")
     table.add_row("[0]", "Exit", "[Gracefully disconnect and close]")
     console.print(table)
+
+def handle_training_manual():
+    console.clear()
+    
+    manual_text = Text()
+    manual_text.append("📖 LEGO WeDo 2.0 CLI Desk Pet - User Guide 📖\n\n", style="bold #00F5D4")
+    
+    manual_text.append("1. How the UI Dashboard Works:\n", style="bold #00BBFF")
+    manual_text.append("   - Vital Telemetry: Shows Profile details, Level/XP progress bars, and stats (Energy, Happiness, Hunger).\n")
+    manual_text.append("     *Note: Hunger is a 'lower is better' stat (0 = satisfied, 100 = starving!).*\n")
+    manual_text.append("   - Pet Expression: Renders animated ASCII faces representing sleeping, singing, dizzy, or eating.\n")
+    manual_text.append("   - Proximity & Tilt: Displays horizontal sliders representing distance and directional arrow icons for tilt.\n")
+    manual_text.append("   - Activity Logs: Color-coded lines showing current autonomous behaviors, levels, and chat responses.\n\n")
+    
+    manual_text.append("2. Translating WeDo Beep Sound Effects:\n", style="bold #00BBFF")
+    manual_text.append("   - Happy Chime Sequence: High-pitched ascending tones. Means petting success, feed success, or LEVEL UP!\n")
+    manual_text.append("   - Starvation Alarm: Continuous alternating siren tones (red LED). Means hunger is > 80. Feed via button click when green!\n")
+    manual_text.append("   - Buzzing Penalty Tone: Flat low pitch. Means you pressed the button too early (red light) during a feed challenge.\n")
+    manual_text.append("   - Wobbling Slide Tones: Sliding pitch frequencies. Means the pet is tilted and currently dizzy (@_@).\n\n")
+    
+    manual_text.append("3. AI Autopilot & Chat:\n", style="bold #00BBFF")
+    manual_text.append("   - Chat Mode ([c]): Talk to your pet. It responds while playing beeps, changing LED, or running motor commands.\n")
+    manual_text.append("   - Autopilot Mode ([a]): Background sensor changes trigger prompts, letting Ollama write code to actuate the robot.\n")
+    manual_text.append("   - Writable Soul: Ollama updates Kepler's character context in '~/.wedo_pet_soul.txt' as it dreams or reacts.\n\n")
+    
+    manual_text.append("4. Proximity Feeding & Petting:\n", style="bold #00BBFF")
+    manual_text.append("   - Petting Kepler: Moving your hand (or sensor) within 6cm immediately pets the pet (wags tail, beep, XP).\n")
+    
+    console.print(Panel(manual_text, title="Kepler Operations Manual", border_style="#00E676"))
+    console.input("\nPress Enter to return to the main menu...")
+
 
 
 def handle_chat_mode(pet):
@@ -1730,6 +1794,8 @@ def main():
                 time.sleep(1.0)
             elif choice == "c":
                 handle_chat_mode(pet)
+            elif choice == "t":
+                handle_training_manual()
             elif choice == "b" and "(MOCK)" in hub.hub_name:
                 def simulate_click():
                     hub.button_state = 1
@@ -1738,6 +1804,7 @@ def main():
                 threading.Thread(target=simulate_click, daemon=True).start()
                 console.print("[yellow]Simulating physical button click on WeDo Smarthub...[/yellow]")
                 time.sleep(0.6)
+
             elif choice == "0":
                 console.print("[cyan]Disconnecting from LEGO Smarthub...[/cyan]")
                 break
