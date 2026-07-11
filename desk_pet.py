@@ -40,6 +40,24 @@ try:
 except ImportError:
     pystray = None
 
+GAMES_LIST = {
+    "tutorial": ("Interactive Live Tutorial", None),
+    "hide_seek": ("🙈 Hide & Seek", "run_hide_and_seek_game"),
+    "speed_pet": ("⏱️ Speed Petting Sprint", "run_speed_petting_game"),
+    "rhythm": ("🥁 Tail-Wag Rhythm Matcher", "run_rhythm_matcher_game"),
+    "balance": ("⚖️ Balance the Tail", "run_balance_tail_game"),
+    "sound_mem": ("🎵 Sound Pitch Memory", "run_sound_memory_game"),
+    "code_break": ("🔐 Pet Code Breaker", "run_code_breaker_game"),
+    "snatcher": ("⚡ Tail Snatcher", "run_tail_snatcher_game"),
+    "dj": ("🎧 Sound DJ", "run_sound_dj_game"),
+    "maze": ("🌀 Tilt Maze Navigator", "run_tilt_maze_game"),
+    "keep_away": ("🛡️ Keep-Away", "run_keep_away_game"),
+    "simon_tilt": ("📐 Simon Says: Tilt", "run_simon_says_tilt_game"),
+    "simon_color": ("🔴 Color Simon Says", "run_simon_says_game"),
+    "tail_counter": ("🧮 Tail Counter", "run_tail_counter_game"),
+    "tug_of_war": ("🪢 Pet Tug-of-War", "run_tug_of_war_game")
+}
+
 import math
 
 class SmallBrainNN:
@@ -785,6 +803,7 @@ class DeskPet:
 
         # Local Neural Network brain
         self.local_brain_nn = train_default_brain()
+        self.wants_game_id = None
 
         self.add_log(f"Pet {self.pet_name} initialized. Welcome!")
 
@@ -810,6 +829,26 @@ class DeskPet:
         # Start autonomous behavior thread
         self.brain_thread = threading.Thread(target=self._brain_loop, daemon=True)
         self.brain_thread.start()
+
+    def get_available_games(self):
+        dist_p = self.hub.check_connected("Distance Sensor")
+        tilt_p = self.hub.check_connected("Tilt Sensor")
+        motor_p = self.hub.check_connected("Motor")
+        
+        avail = ["tutorial", "sound_mem", "simon_color"]
+        if dist_p and motor_p:
+            avail.extend(["hide_seek", "speed_pet", "snatcher", "keep_away", "tail_counter"])
+        if motor_p:
+            avail.append("rhythm")
+        if tilt_p and motor_p:
+            avail.extend(["balance", "maze", "tug_of_war"])
+        if dist_p and tilt_p:
+            avail.append("code_break")
+        if dist_p:
+            avail.append("dj")
+        if tilt_p:
+            avail.append("simon_tilt")
+        return avail
 
     def _start_system_tray(self):
         def create_tray_image():
@@ -866,6 +905,60 @@ class DeskPet:
                 self.change_profile(profile_name)
             return f
 
+        def run_game_window(game_id):
+            def f(icon, item):
+                import platform
+                import subprocess
+                script_path = os.path.abspath(sys.argv[0])
+                try:
+                    if platform.system() == "Linux":
+                        try:
+                            subprocess.Popen(["gnome-terminal", "--", script_path, "--play-game", game_id])
+                        except Exception:
+                            subprocess.Popen(["xterm", "-e", script_path, "--play-game", game_id])
+                    elif platform.system() == "Windows":
+                        subprocess.Popen([script_path, "--play-game", game_id], shell=True)
+                    elif platform.system() == "Darwin":
+                        cmd = f'tell application "Terminal" to do script "{script_path} --play-game {game_id}"'
+                        subprocess.Popen(["osascript", "-e", cmd])
+                except Exception as e:
+                    self.add_log(f"Error launching game terminal: {e}")
+            return f
+
+        def get_games_submenu():
+            items = []
+            avail = self.get_available_games()
+            for game_id in avail:
+                title = GAMES_LIST[game_id][0]
+                items.append(pystray.MenuItem(title, run_game_window(game_id)))
+            return pystray.Menu(*items)
+
+        def on_play_headless(icon, item):
+            avail = self.get_available_games()
+            headless_games = ["hide_seek", "tail_counter", "tug_of_war", "simon_tilt", "dj"]
+            playable_headless = [g for g in avail if g in headless_games]
+            if playable_headless:
+                import random
+                chosen = random.choice(playable_headless)
+                self.run_background_game(chosen)
+                if self.tray_icon:
+                    try:
+                        self.tray_icon.notify(
+                            f"Starting {GAMES_LIST[chosen][0]}! Interact with the physical hub box using sensors/LEDs/beeps!",
+                            "Headless Game Started"
+                        )
+                    except Exception:
+                        pass
+            else:
+                if self.tray_icon:
+                    try:
+                        self.tray_icon.notify(
+                            "Connect a Distance or Tilt sensor to play headless games!",
+                            "No Sensors Detected"
+                        )
+                    except Exception:
+                        pass
+
         def on_exit(icon, item):
             icon.stop()
             self.is_running = False
@@ -881,6 +974,9 @@ class DeskPet:
             pystray.MenuItem("Poke Kepler", on_poke),
             pystray.MenuItem("Play Happy Chime", on_chime),
             pystray.MenuItem("Toggle Autopilot", on_toggle_autopilot, checked=lambda item: self.ai_autopilot),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Play Game (Interactive Window)", get_games_submenu),
+            pystray.MenuItem("Play Headless Game (No Screen)", on_play_headless),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Change Profile", pystray.Menu(
                 pystray.MenuItem("Puppy (Kepler)", on_profile("Puppy"), checked=lambda item: self.profile == "Puppy"),
@@ -1664,6 +1760,290 @@ class DeskPet:
         # Lose XP on negative interaction
         self.gain_xp(-5)
 
+    def get_brain_prediction(self):
+        # 1. Map current mood to one-hot encoding
+        moods = ["sleeping", "awake", "happy", "angry", "dizzy", "eating"]
+        one_hot = [0.0] * 6
+        if self.mood in moods:
+            one_hot[moods.index(self.mood)] = 1.0
+            
+        # 2. Get normalized distance
+        dist_p = self.hub.check_connected("Distance Sensor")
+        dist = self.hub.sensor_cache[dist_p]["distance"] if dist_p else 10
+        norm_dist = dist / 10.0
+        
+        # 3. Get tilt binary
+        tilt_p = self.hub.check_connected("Tilt Sensor")
+        tilt = self.hub.sensor_cache[tilt_p]["tilt"] if tilt_p else "Neutral"
+        tilt_binary = 0.0 if tilt == "Neutral" else 1.0
+        
+        # 4. Assemble input vector (12 nodes)
+        # Check that we have exactly 12 nodes matching network inputs
+        X = one_hot + [
+            norm_dist,
+            tilt_binary,
+            self.hunger / 100.0,
+            self.energy / 100.0,
+            self.happiness / 100.0,
+            1.0  # bias
+        ]
+        
+        # 5. Run forward pass
+        probs = self.local_brain_nn.forward(X)
+        
+        # Output actions mapping:
+        # 0: Wag Tail
+        # 1: Sing Chime
+        # 2: Spin/Dance
+        # 3: Sleep
+        # 4: Wake up
+        # 5: Eat
+        # 6: Idle / Wait
+        actions = ["Wag Tail", "Sing Chime", "Spin & Dance", "Fall Asleep", "Wake Up", "Eat Snack", "Idle & Think"]
+        return list(zip(actions, probs))
+
+    def run_background_game(self, game_id):
+        def play_game_thread():
+            self.mood = "playing_game"
+            self.add_log(f"[Background Game] Starting {GAMES_LIST[game_id][0]} headless...")
+            
+            try:
+                if game_id == "hide_seek":
+                    target = random.randint(3, 7)
+                    self.hub.set_led("blue")
+                    for _ in range(3):
+                        self.hub.beep(880, 100)
+                        time.sleep(0.05)
+                    time.sleep(0.4)
+                    
+                    consecutive_matches = 0
+                    start_t = time.time()
+                    while time.time() - start_t < 25.0 and consecutive_matches < 4:
+                        dist = 10
+                        dist_p = self.hub.check_connected("Distance Sensor")
+                        if dist_p:
+                            dist = self.hub.sensor_cache[dist_p]["distance"]
+                        
+                        if dist >= 10:
+                            self.hub.set_led("off")
+                            consecutive_matches = 0
+                            time.sleep(0.5)
+                        else:
+                            diff = abs(dist - target)
+                            if diff == 0:
+                                consecutive_matches += 1
+                                self.hub.set_led("green")
+                                self.hub.stop_motor()
+                                self.hub.beep(1200, 80)
+                                self.hub.set_motor(30 if consecutive_matches % 2 == 0 else -30)
+                                time.sleep(0.5)
+                            else:
+                                consecutive_matches = 0
+                                if diff <= 1:
+                                    self.hub.set_led("yellow")
+                                    self.hub.stop_motor()
+                                    self.hub.beep(800, 80)
+                                    time.sleep(0.4)
+                                elif diff == 2:
+                                    self.hub.set_led("orange")
+                                    self.hub.stop_motor()
+                                    self.hub.beep(500, 80)
+                                    time.sleep(0.6)
+                                else:
+                                    self.hub.set_led("red")
+                                    self.hub.stop_motor()
+                                    self.hub.beep(300, 80)
+                                    time.sleep(0.8)
+                                    
+                    self.hub.stop_motor()
+                    if consecutive_matches >= 4:
+                        self.hub.set_led("green")
+                        for _ in range(3):
+                            self.hub.stop_motor()
+                            self.hub.beep(880, 80)
+                            self.hub.set_motor(50)
+                            time.sleep(0.1)
+                            self.hub.stop_motor()
+                            self.hub.beep(1047, 80)
+                            self.hub.set_motor(-50)
+                            time.sleep(0.1)
+                        self.hub.stop_motor()
+                        self.gain_xp(35)
+                        self.add_log(f"[Background Game] 🎉 You won Hide & Seek! Kepler gained +35 XP!")
+                    else:
+                        self.hub.set_led("red")
+                        self.hub.beep(200, 500)
+                        self.add_log(f"[Background Game] 😿 Time's up! Hide & Seek failed.")
+                        
+                elif game_id == "tail_counter":
+                    secret_count = random.randint(1, 4)
+                    self.hub.set_led("purple")
+                    self.hub.beep(600, 150)
+                    time.sleep(0.8)
+                    
+                    for _ in range(secret_count):
+                        try:
+                            self.hub.set_motor(55)
+                            time.sleep(0.2)
+                            self.hub.set_motor(-55)
+                            time.sleep(0.2)
+                        except Exception:
+                            pass
+                    self.hub.stop_motor()
+                    self.hub.set_led("blue")
+                    
+                    user_count = 0
+                    start_t = time.time()
+                    last_close = False
+                    
+                    while time.time() - start_t < 10.0:
+                        dist = 10
+                        dist_p = self.hub.check_connected("Distance Sensor")
+                        if dist_p:
+                            dist = self.hub.sensor_cache[dist_p]["distance"]
+                            
+                        is_close = (dist < 6)
+                        if is_close and not last_close:
+                            user_count += 1
+                            self.hub.beep(800, 80)
+                        last_close = is_close
+                        time.sleep(0.05)
+                        
+                    if user_count == secret_count:
+                        self.hub.set_led("green")
+                        for _ in range(3):
+                            self.hub.beep(900, 100)
+                            time.sleep(0.1)
+                        self.gain_xp(30)
+                        self.add_log(f"[Background Game] 🎉 Correct! Kepler counted {secret_count} wags. +30 XP!")
+                    else:
+                        self.hub.set_led("red")
+                        self.hub.beep(200, 500)
+                        self.add_log(f"[Background Game] 😿 Wrong count! Kepler counted {secret_count}, you petted {user_count}.")
+                        
+                elif game_id == "tug_of_war":
+                    self.hub.set_led("cyan")
+                    self.hub.beep(700, 150)
+                    time.sleep(0.5)
+                    
+                    target_pulls = 12
+                    pulls_done = 0
+                    start_t = time.time()
+                    last_tilt = "Neutral"
+                    
+                    while time.time() - start_t < 12.0 and pulls_done < target_pulls:
+                        elapsed = time.time() - start_t
+                        self.hub.set_motor(60 if int(elapsed * 4) % 2 == 0 else -60)
+                        
+                        tilt_p = self.hub.check_connected("Tilt Sensor")
+                        tilt_val = self.hub.sensor_cache[tilt_p]["tilt"] if tilt_p else "Neutral"
+                        
+                        if tilt_val in ["Left", "Right"] and tilt_val != last_tilt:
+                            pulls_done += 1
+                            self.hub.stop_motor()
+                            self.hub.beep(1000, 50)
+                        last_tilt = tilt_val
+                        time.sleep(0.08)
+                        
+                    self.hub.stop_motor()
+                    if pulls_done >= target_pulls:
+                        self.hub.set_led("green")
+                        self.gain_xp(45)
+                        self.add_log(f"[Background Game] 🎉 Tug-of-War Victory! +45 XP!")
+                    else:
+                        self.hub.set_led("red")
+                        self.hub.beep(250, 450)
+                        self.add_log(f"[Background Game] 😿 Kepler won the Tug-of-War.")
+                        
+                elif game_id == "simon_tilt":
+                    self.hub.set_led("yellow")
+                    self.hub.beep(800, 150)
+                    time.sleep(0.8)
+                    
+                    directions = ["L", "R", "F", "B"]
+                    beep_freqs = {"L": 500, "R": 700, "F": 900, "B": 1100}
+                    led_colors = {"L": "blue", "R": "orange", "F": "green", "B": "red"}
+                    
+                    seq = [random.choice(directions) for _ in range(3)]
+                    for direction in seq:
+                        self.hub.set_led(led_colors[direction])
+                        self.hub.beep(beep_freqs[direction], 450)
+                        time.sleep(0.6)
+                        self.hub.set_led("off")
+                        time.sleep(0.2)
+                        
+                    self.hub.set_led("white")
+                    user_seq = []
+                    success = True
+                    
+                    for step in range(3):
+                        action = None
+                        start_step = time.time()
+                        while action is None and time.time() - start_step < 5.0:
+                            tilt_p = self.hub.check_connected("Tilt Sensor")
+                            tilt_val = self.hub.sensor_cache[tilt_p]["tilt"] if tilt_p else "Neutral"
+                            if tilt_val == "Left": action = "L"
+                            elif tilt_val == "Right": action = "R"
+                            elif tilt_val == "Forward": action = "F"
+                            elif tilt_val == "Backward": action = "B"
+                            time.sleep(0.1)
+                            
+                        if action is None:
+                            success = False
+                            break
+                        user_seq.append(action)
+                        self.hub.beep(beep_freqs[action], 200)
+                        time.sleep(0.8)
+                        
+                    if success and user_seq == seq:
+                        self.hub.set_led("green")
+                        self.gain_xp(35)
+                        self.add_log(f"[Background Game] 🎉 Simon Says: Tilt matched successfully! +35 XP!")
+                    else:
+                        self.hub.set_led("red")
+                        self.hub.beep(250, 500)
+                        self.add_log(f"[Background Game] 😿 Simon Says matched incorrectly.")
+                        
+                elif game_id == "dj":
+                    self.hub.set_led("purple")
+                    self.hub.beep(900, 200)
+                    time.sleep(0.4)
+                    
+                    start_t = time.time()
+                    while time.time() - start_t < 15.0:
+                        dist = 10
+                        dist_p = self.hub.check_connected("Distance Sensor")
+                        if dist_p:
+                            dist = self.hub.sensor_cache[dist_p]["distance"]
+                            
+                        if dist >= 10:
+                            self.hub.set_led("off")
+                            time.sleep(0.1)
+                        else:
+                            freq = 1300 - (dist * 100)
+                            freq = min(1300, max(300, freq))
+                            
+                            colors = ["red", "orange", "yellow", "green", "cyan", "blue", "purple"]
+                            color = colors[min(len(colors)-1, int(dist * 0.7))]
+                            
+                            self.hub.set_led(color)
+                            self.hub.stop_motor()
+                            self.hub.beep(int(freq), 120)
+                            time.sleep(0.12)
+                            
+                    self.hub.set_led("green")
+                    self.gain_xp(20)
+                    self.add_log(f"[Background Game] 🎉 DJ Session complete! Kepler gained +20 XP!")
+            except Exception as e:
+                self.add_log(f"[Background Game Error] {e}")
+            finally:
+                self.hub.stop_motor()
+                self.hub.set_led("green")
+                self.mood = "awake"
+                self.save_state()
+                
+        threading.Thread(target=play_game_thread, daemon=True).start()
+
     def play_midi(self, filename, query=None, selected_song_dict=None):
         if self.music_playing:
             self.add_log("Already playing a song!")
@@ -2008,6 +2388,40 @@ class DeskPet:
                         event = random.choice(goofy_events)
                         self.add_log(f"{self.pet_name} wanted to: {event}")
                         self.execute_goofy_action(event)
+                        
+                    # Random Headless Game trigger
+                    if random.random() < 0.06 and not self.screaming_for_food and not self.music_playing and self.mood == "awake":
+                        avail = self.get_available_games()
+                        headless_games = ["hide_seek", "tail_counter", "tug_of_war", "simon_tilt", "dj"]
+                        playable_headless = [g for g in avail if g in headless_games]
+                        if playable_headless:
+                            chosen = random.choice(playable_headless)
+                            self.wants_game_id = chosen
+                            game_title = GAMES_LIST[chosen][0]
+                            self.add_log(f"{self.pet_name} wants to play: {game_title}!")
+                            
+                            def play_alert():
+                                try:
+                                    self.hub.stop_motor()
+                                    self.hub.beep(880, 100)
+                                    time.sleep(0.05)
+                                    self.hub.beep(1100, 100)
+                                    time.sleep(0.05)
+                                    self.hub.beep(1320, 150)
+                                except Exception:
+                                    pass
+                            threading.Thread(target=play_alert, daemon=True).start()
+                            
+                            self.run_background_game(chosen)
+                            
+                            if getattr(self, "tray_icon", None):
+                                try:
+                                    self.tray_icon.notify(
+                                        f"{self.pet_name} launched {game_title}! Play using the physical hub box!",
+                                        "Let's Play a Game!"
+                                    )
+                                except Exception:
+                                    pass
                     
                 # Hunger warnings & screaming challenge trigger
                 if self.hunger > 80 and not self.screaming_for_food and not self.music_playing:
@@ -2055,10 +2469,7 @@ class DeskPet:
                     self.hub.set_led("green")
 
                 # Dynamic reaction to distance
-                if self.hunger > 60:
-                    self.add_log(f"{self.pet_name} saw your hand and thought you were offering food!")
-                    self.interact_feed()
-                elif dist < 3:
+                if dist < 3:
                     self.add_log(f"{self.pet_name} felt startled by your hand being too close!")
                     self.interact_poke()
                 else:
@@ -2082,11 +2493,13 @@ class DeskPet:
                         self.add_log(f"{self.pet_name} did a joyful dance near your hand!")
                         self.hub.set_led("cyan")
                         for _ in range(3):
-                            self.hub.set_motor(60)
+                            self.hub.stop_motor()
                             self.hub.beep(880, 80)
+                            self.hub.set_motor(60)
                             time.sleep(0.12)
-                            self.hub.set_motor(-60)
+                            self.hub.stop_motor()
                             self.hub.beep(784, 80)
+                            self.hub.set_motor(-60)
                             time.sleep(0.12)
                         self.hub.stop_motor()
                         self.gain_xp(25)
@@ -2119,7 +2532,12 @@ def make_layout(pet, hub_type) -> Layout:
     
     layout["body"].split_row(
         Layout(name="pet_view", ratio=4),
-        Layout(name="logs_view", ratio=5)
+        Layout(name="right_side", ratio=5)
+    )
+    
+    layout["right_side"].split_column(
+        Layout(name="logs_view", ratio=5),
+        Layout(name="nn_view", ratio=4)
     )
     
     # Progress bar renderer using unicode blocks
@@ -2202,8 +2620,9 @@ def make_layout(pet, hub_type) -> Layout:
     status_table.add_row("Tilt: ", tilt_str)
     status_table.add_row("AI Autopilot: ", ai_status)
     status_table.add_row("Trainer HP: ", make_progress_bar(pet.trainer_hp, "#FF1744" if pet.trainer_hp < 40 else "#00E676"))
-
-
+    if getattr(pet, "wants_game_id", None):
+        game_title = GAMES_LIST[pet.wants_game_id][0]
+        status_table.add_row("Wants to Play: ", f"[bold yellow]★ {game_title} ★[/bold yellow]")
 
     face_panel = Panel(
         Align.center(Text(f"\n\n  {face_art}  \n\n", style="bold #FFD600", justify="center")),
@@ -2221,7 +2640,7 @@ def make_layout(pet, hub_type) -> Layout:
     # 3. Logs View (Right Panel)
     log_text = Text()
     with pet.log_lock:
-        visible_logs = pet.logs[-14:] # Fit to panel
+        visible_logs = pet.logs[-8:] # Fit to smaller panel
         for log in visible_logs:
             if "starving" in log or "angry" in log or "Poke" in log:
                 log_text.append(log + "\n", style="#FF1744")
@@ -2235,6 +2654,43 @@ def make_layout(pet, hub_type) -> Layout:
                 log_text.append(log + "\n", style="white")
                 
     layout["logs_view"].update(Panel(log_text, title="Pet Activity Logs", border_style="#9B5DE5"))
+
+    # 4. Neural Network Live Telemetry Panel
+    nn_preds = pet.get_brain_prediction()
+    nn_table = Table.grid(padding=(0, 2))
+    nn_table.add_column(style="#00F5D4", justify="right")
+    nn_table.add_column(style="white")
+    
+    for action, prob in nn_preds:
+        pct = int(prob * 100)
+        filled = min(5, max(0, int(prob * 5)))
+        empty = 5 - filled
+        bar = "█" * filled + "░" * empty
+        nn_table.add_row(f"{action}: ", f"[bold #00F5D4]{bar}[/bold #00F5D4] {pct}%")
+        
+    input_text = Text.assemble(
+        ("Inputs: ", "bold white"),
+        (f"Dist={distance_val if distance_val is not None else 10}cm ", "#00BBFF"),
+        ("| ", "dim"),
+        (f"Tilt={tilt_val if tilt_val is not None else 'Neutral'} ", "#FF9100"),
+        ("| ", "dim"),
+        (f"Hunger={pet.hunger}% ", "#FF1744"),
+        ("| ", "dim"),
+        (f"Energy={pet.energy}% ", "#00E676")
+    )
+    
+    nn_content = Table.grid(padding=(0, 0))
+    nn_content.add_column(justify="center")
+    nn_content.add_row(Align.center(input_text))
+    nn_content.add_row(Align.center(Text("")))
+    nn_content.add_row(Align.center(nn_table))
+    
+    nn_panel = Panel(
+        Align.center(nn_content),
+        title="🧠 SmallBrain™ Live Neural Net Telemetry",
+        border_style="#00F5D4"
+    )
+    layout["nn_view"].update(nn_panel)
 
     # 4. Footer Help Prompt
     footer_text = Text.assemble(
@@ -4024,6 +4480,158 @@ def run_simon_says_game(pet):
     console.input("\nPress Enter to return to games menu...")
 
 
+def run_tail_counter_game(pet):
+    console.clear()
+    console.print("=== 🧮 Tail Counter (Counting Math) 🧮 ===\n", style="bold cyan")
+    console.print("Instructions: Kepler will wag his tail a secret number of times (between 1 and 5).")
+    console.print("Watch and count the wags carefully!")
+    console.print("To answer, wave your hand under the Distance Sensor (< 6cm) [bold green]exactly[/bold green] that many times!")
+    console.input("\nPress Enter to begin...")
+    
+    rounds = 3
+    round_num = 1
+    total_xp = 0
+    
+    try:
+        while round_num <= rounds:
+            import random
+            secret_count = random.randint(1, 5)
+            console.print(f"\n[bold yellow]Round {round_num}: Watch Kepler count...[/bold yellow]")
+            time.sleep(1.0)
+            
+            for _ in range(secret_count):
+                try:
+                    pet.hub.set_motor(55)
+                    time.sleep(0.2)
+                    pet.hub.set_motor(-55)
+                    time.sleep(0.2)
+                except Exception:
+                    pass
+            try:
+                pet.hub.stop_motor()
+            except Exception:
+                pass
+                
+            console.print("\n[bold cyan]YOUR TURN! Wave your hand to match the count (Hold hand close then withdraw for each count)...[/bold cyan]")
+            user_count = 0
+            start_t = time.time()
+            last_close = False
+            
+            while time.time() - start_t < 8.0:
+                dist = 10
+                dist_p = pet.hub.check_connected("Distance Sensor")
+                if dist_p:
+                    dist = pet.hub.sensor_cache[dist_p]["distance"]
+                    
+                is_close = (dist < 6)
+                if is_close and not last_close:
+                    user_count += 1
+                    console.print(f"Recorded Wave: [bold green]{user_count}[/bold green]     ", end="\r")
+                    try:
+                        pet.hub.stop_motor()
+                        pet.hub.beep(800, 80)
+                    except Exception:
+                        pass
+                last_close = is_close
+                time.sleep(0.05)
+                
+            console.print(f"\nTime's up! You petted: {user_count} wags.")
+            if user_count == secret_count:
+                console.print("[green]Correct! Kepler is doing a happy waddle![/green]")
+                try:
+                    pet.hub.set_led("green")
+                    for _ in range(3):
+                        pet.hub.beep(900, 100)
+                        time.sleep(0.1)
+                except Exception:
+                    pass
+                pet.gain_xp(30)
+                total_xp += 30
+            else:
+                console.print(f"[red]Incorrect! Kepler counted {secret_count} wags.[/red]")
+                try:
+                    pet.hub.beep(200, 450)
+                except Exception:
+                    pass
+            
+            round_num += 1
+            if round_num <= rounds:
+                console.input("\nPress Enter to begin the next round...")
+                
+        console.print(f"\n[green]Game Complete! Total XP gained: {total_xp} XP![/green]")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.stop_motor()
+            pet.hub.set_led("green")
+        except Exception:
+            pass
+    console.input("\nPress Enter to return to games menu...")
+
+
+def run_tug_of_war_game(pet):
+    console.clear()
+    console.print("=== 🪢 Pet Tug-of-War (Tilt Pull) 🪢 ===\n", style="bold cyan")
+    console.print("Instructions: Kepler is pulling on the rope! The tail is sweeping with force.")
+    console.print("Tilt the Smart Hub (Tilt Sensor) Left and Right repeatedly to pull Kepler back!")
+    console.print("You need to match 15 correct pull tilts in 12 seconds to win!")
+    console.input("\nPress Enter to start pulling...")
+    
+    target_pulls = 15
+    pulls_done = 0
+    start_t = time.time()
+    last_tilt = "Neutral"
+    
+    try:
+        while time.time() - start_t < 12.0 and pulls_done < target_pulls:
+            elapsed = time.time() - start_t
+            
+            try:
+                pet.hub.set_motor(60 if int(elapsed * 4) % 2 == 0 else -60)
+            except Exception:
+                pass
+                
+            tilt_p = pet.hub.check_connected("Tilt Sensor")
+            tilt_val = pet.hub.sensor_cache[tilt_p]["tilt"] if tilt_p else "Neutral"
+            
+            if tilt_val in ["Left", "Right"] and tilt_val != last_tilt:
+                pulls_done += 1
+                try:
+                    pet.hub.stop_motor()
+                    pet.hub.beep(1000, 50)
+                except Exception:
+                    pass
+                
+            last_tilt = tilt_val
+            
+            filled = min(10, int((pulls_done / target_pulls) * 10))
+            empty = 10 - filled
+            gauge = "=" * filled + ">" + " " * empty
+            
+            console.print(f"Time: {12.0 - elapsed:.1f}s | Progress: [{gauge}] {pulls_done}/{target_pulls} pulls     ", end="\r")
+            time.sleep(0.08)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            pet.hub.stop_motor()
+            pet.hub.set_led("green")
+        except Exception:
+            pass
+            
+    if pulls_done >= target_pulls:
+        console.print("\n\n[bold green]🏆 Victory! You won the Tug-of-War! Kepler lies down happily! 🏆[/bold green]")
+        pet.gain_xp(45)
+    else:
+        console.print(f"\n\n[red]Defeat! Kepler pulled you over! Total pulls: {pulls_done}/{target_pulls}.[/red]")
+        try:
+            pet.hub.beep(250, 450)
+        except Exception:
+            pass
+    console.input("\nPress Enter to return to games menu...")
+
+
 # -----------------------------------------------------------------
 # Ollama Setup Installer helpers
 # -----------------------------------------------------------------
@@ -4115,6 +4723,8 @@ def main():
                         help="Run in simulation/mock mode without connecting to physical hardware.")
     parser.add_argument("--scan", action="store_true",
                         help="Scan and list nearby BLE devices, then exit.")
+    parser.add_argument("--play-game", type=str, default=None,
+                        help="Start directly into a specific minigame and exit when done.")
     args = parser.parse_args()
 
     if args.scan:
@@ -4155,6 +4765,24 @@ def main():
     is_new = state_dict.pop("is_new", False) if "is_new" in state_dict else False
     pet = DeskPet(hub, state_dict)
     
+    if args.play_game:
+        if args.play_game in GAMES_LIST:
+            game_func_name = GAMES_LIST[args.play_game][1]
+            if game_func_name:
+                game_func = globals().get(game_func_name)
+                if game_func:
+                    console.print(f"[cyan]Launching {GAMES_LIST[args.play_game][0]} directly...[/cyan]")
+                    try:
+                        game_func(pet)
+                    except Exception as e:
+                        console.print(f"[red]Error playing game: {e}[/red]")
+                    if pet.wants_game_id == args.play_game:
+                        pet.wants_game_id = None
+                        pet.save_state()
+            else:
+                run_interactive_tutorial(pet)
+        sys.exit(0)
+
     if is_new and not no_tty:
         run_interactive_tutorial(pet)
 
