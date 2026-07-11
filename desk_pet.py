@@ -1547,6 +1547,7 @@ class DeskPet:
             self.add_log(f"{self.pet_name} woke up hungry!")
         
         self.mood = "eating"
+        self.screaming_for_food = False
         self.add_log(f"Feeding {self.pet_name} a tasty treat...")
         
         # Interactive chewing animation & sounds
@@ -3637,8 +3638,21 @@ def run_interactive_tutorial(pet):
     pet.screaming_for_food = True
     pet.screaming_cycle_start = time.time()
     
-    while pet.screaming_for_food and pet.is_running:
-        time.sleep(0.2)
+    # Enable raw terminal mode to capture b keypress for simulating physical button click in Mock mode
+    set_terminal_raw(True)
+    try:
+        while pet.screaming_for_food and pet.is_running:
+            key = read_key(timeout=0.1)
+            if key == "b" and "(MOCK)" in pet.hub.hub_name:
+                def simulate_click():
+                    pet.hub.button_state = 1
+                    time.sleep(0.5)
+                    pet.hub.button_state = 0
+                threading.Thread(target=simulate_click, daemon=True).start()
+                pet.add_log("Simulated physical button click.")
+            time.sleep(0.1)
+    finally:
+        set_terminal_raw(False)
         
     console.print("\n[green]Great job! You finished the interactive tutorial. Kepler is fully trained![/green]")
     try:
