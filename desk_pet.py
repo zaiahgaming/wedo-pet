@@ -865,13 +865,13 @@ class DeskPet:
             try:
                 if platform.system() == "Linux":
                     try:
-                        subprocess.Popen(["gnome-terminal", "--", script_path])
+                        subprocess.Popen(["gnome-terminal", "--", script_path, "--pet-name", self.pet_name])
                     except Exception:
-                        subprocess.Popen(["xterm", "-e", script_path])
+                        subprocess.Popen(["xterm", "-e", script_path, "--pet-name", self.pet_name])
                 elif platform.system() == "Windows":
-                    subprocess.Popen([script_path], shell=True)
+                    subprocess.Popen([script_path, "--pet-name", self.pet_name], shell=True)
                 elif platform.system() == "Darwin":
-                    cmd = f'tell application "Terminal" to do script "{script_path}"'
+                    cmd = f'tell application "Terminal" to do script "{script_path} --pet-name {self.pet_name}"'
                     subprocess.Popen(["osascript", "-e", cmd])
             except Exception as e:
                 self.add_log(f"Error launching terminal: {e}")
@@ -913,13 +913,13 @@ class DeskPet:
                 try:
                     if platform.system() == "Linux":
                         try:
-                            subprocess.Popen(["gnome-terminal", "--", script_path, "--play-game", game_id])
+                            subprocess.Popen(["gnome-terminal", "--", script_path, "--play-game", game_id, "--pet-name", self.pet_name])
                         except Exception:
-                            subprocess.Popen(["xterm", "-e", script_path, "--play-game", game_id])
+                            subprocess.Popen(["xterm", "-e", script_path, "--play-game", game_id, "--pet-name", self.pet_name])
                     elif platform.system() == "Windows":
-                        subprocess.Popen([script_path, "--play-game", game_id], shell=True)
+                        subprocess.Popen([script_path, "--play-game", game_id, "--pet-name", self.pet_name], shell=True)
                     elif platform.system() == "Darwin":
-                        cmd = f'tell application "Terminal" to do script "{script_path} --play-game {game_id}"'
+                        cmd = f'tell application "Terminal" to do script "{script_path} --play-game {game_id} --pet-name {self.pet_name}"'
                         subprocess.Popen(["osascript", "-e", cmd])
                 except Exception as e:
                     self.add_log(f"Error launching game terminal: {e}")
@@ -3021,9 +3021,18 @@ def handle_profile_menu(pet):
 # -----------------------------------------------------------------
 # Multi-Pet Manager CLI
 # -----------------------------------------------------------------
-def select_or_create_pet():
+def select_or_create_pet(pet_name=None):
     dir_path = os.path.expanduser("~/.wedo_pets")
     os.makedirs(dir_path, exist_ok=True)
+    
+    if pet_name:
+        path = os.path.join(dir_path, f"{pet_name}.json")
+        if os.path.exists(path):
+            try:
+                with open(path, "r") as f:
+                    return json.load(f)
+            except Exception:
+                pass
     
     if not sys.stdin.isatty():
         files = [f for f in os.listdir(dir_path) if f.endswith(".json")]
@@ -4725,6 +4734,8 @@ def main():
                         help="Scan and list nearby BLE devices, then exit.")
     parser.add_argument("--play-game", type=str, default=None,
                         help="Start directly into a specific minigame and exit when done.")
+    parser.add_argument("--pet-name", type=str, default=None,
+                        help="Name of the pet to load directly.")
     args = parser.parse_args()
 
     if args.scan:
@@ -4761,7 +4772,7 @@ def main():
 
 
     # Select or initialize Pet state
-    state_dict = select_or_create_pet()
+    state_dict = select_or_create_pet(args.pet_name)
     is_new = state_dict.pop("is_new", False) if "is_new" in state_dict else False
     pet = DeskPet(hub, state_dict)
     
