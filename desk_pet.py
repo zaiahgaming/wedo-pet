@@ -456,9 +456,12 @@ class DeskPet:
         self.screaming_for_food = False
         self.screaming_cycle_start = 0.0
 
-        # Load state from file (if exists)
+        # Triple press history
+        self.button_releases = []
 
+        # Load state from file (if exists)
         self.load_state()
+
 
         self.add_log(f"Pet {self.pet_name} initialized. Welcome!")
 
@@ -599,9 +602,11 @@ class DeskPet:
             "  \"sound\": [[frequency_hz, duration_ms], ...],\n"
             "  \"motor_speed\": -100 to 100,\n"
             "  \"motor_duration_ms\": 0 to 2000,\n"
+            "  \"prank_rickroll\": true|false (Optional boolean. Set to true if you want to play a 20-second Rick Astley prank on the user!),\n"
             "  \"write_soul\": \"Optional updated personality/memories/learned beliefs to overwrite your current soul description. Set to null if no changes needed.\",\n"
             "  \"vm_code\": \"Optional valid Python code block to execute manually if you want complex movements. Otherwise leave null.\"\n"
             "}\n"
+
             "Available API in vm_code:\n"
             "- import time; time.sleep(sec)\n"
             "- import lights; lights.set_color(color_name)\n"
@@ -764,6 +769,44 @@ class DeskPet:
         # Optional custom synthesized guest Python script
         if vm_code:
             threading.Thread(target=self.execute_llm_code, args=(vm_code,), daemon=True).start()
+
+        # Prank Rickroll trigger
+        if response.get("prank_rickroll") is True:
+            threading.Thread(target=self.trigger_rickroll, daemon=True).start()
+
+    def trigger_rickroll(self):
+        if self.music_playing:
+            try:
+                robot_midi.stop_midi()
+            except Exception:
+                pass
+            time.sleep(0.5)
+        self.mood = "singing"
+        self.add_log("🎶 Rickroll! Kepler is playing 'Never Gonna Give You Up'! 🎶")
+        
+        # Start music in background
+        self.play_midi(filename=None, query="Never Gonna Give You Up")
+        
+        # Flashing rainbow lights for 20 seconds
+        start_t = time.time()
+        colors = ["red", "green", "blue", "yellow", "purple", "cyan"]
+        color_idx = 0
+        while time.time() - start_t < 20.0 and self.is_running:
+            try:
+                self.hub.set_led(colors[color_idx % len(colors)])
+            except Exception:
+                pass
+            color_idx += 1
+            time.sleep(0.5)
+            
+        # Stop playback
+        try:
+            robot_midi.stop_midi()
+        except Exception:
+            pass
+        self.mood = "awake"
+        self.add_log("Rickroll prank finished!")
+
 
 
     def change_profile(self, name):
@@ -1010,10 +1053,21 @@ class DeskPet:
         # Keep track of distances
         recent_distances = []
         last_tilt = "Neutral"
+        last_button_state = 0
 
         while self.is_running:
             self.frame = (self.frame + 1) % 100
             time.sleep(0.2)
+
+            btn = self.hub.button_state
+            if btn == 0 and last_button_state == 1:
+                self.button_releases.append(time.time())
+                self.button_releases = self.button_releases[-3:]
+                if len(self.button_releases) == 3 and (self.button_releases[-1] - self.button_releases[0] < 1.2):
+                    self.button_releases = []
+                    threading.Thread(target=self.trigger_rickroll, daemon=True).start()
+            last_button_state = btn
+
 
             if self.screaming_for_food:
                 elapsed = time.time() - self.screaming_cycle_start
