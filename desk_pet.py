@@ -150,27 +150,36 @@ def read_key():
         old_settings = termios.tcgetattr(fd)
         try:
             tty.setraw(fd)
-            r, _, _ = select.select([sys.stdin], [], [], 10.0)
+            r, _, _ = select.select([fd], [], [], 10.0)
             if not r:
                 return ""
-            ch = sys.stdin.read(1)
-            if ch == '\x03':
+            ch_bytes = os.read(fd, 1)
+            if not ch_bytes:
+                return ""
+            ch = ch_bytes[0]
+            if ch == 3:
                 raise KeyboardInterrupt()
-            if ch == '\x1b':
-                r_esc, _, _ = select.select([sys.stdin], [], [], 0.05)
+            if ch == 27:
+                r_esc, _, _ = select.select([fd], [], [], 0.05)
                 if r_esc:
-                    ch2 = sys.stdin.read(1)
-                    if ch2 == '[':
-                        r_seq, _, _ = select.select([sys.stdin], [], [], 0.05)
+                    ch2_bytes = os.read(fd, 1)
+                    if ch2_bytes and ch2_bytes[0] == 91:
+                        r_seq, _, _ = select.select([fd], [], [], 0.05)
                         if r_seq:
-                            ch3 = sys.stdin.read(1)
-                            if ch3 == 'A': return "up"
-                            if ch3 == 'B': return "down"
-                            if ch3 == 'C': return "right"
-                            if ch3 == 'D': return "left"
+                            ch3_bytes = os.read(fd, 1)
+                            if ch3_bytes:
+                                ch3 = ch3_bytes[0]
+                                if ch3 == 65: return "up"
+                                if ch3 == 66: return "down"
+                                if ch3 == 67: return "right"
+                                if ch3 == 68: return "left"
                 return "escape"
-            if ch == '\r' or ch == '\n': return "enter"
-            return ch.lower()
+            if ch in (13, 10):
+                return "enter"
+            try:
+                return chr(ch).lower()
+            except Exception:
+                return ""
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
