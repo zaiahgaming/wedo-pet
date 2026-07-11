@@ -125,6 +125,188 @@ def train_default_brain():
     return brain
 
 
+def read_key():
+    if sys.platform.startswith("win"):
+        import msvcrt
+        try:
+            ch = msvcrt.getch()
+            if ch in (b'\x00', b'\xe0'):
+                ch2 = msvcrt.getch()
+                if ch2 == b'H': return "up"
+                if ch2 == b'P': return "down"
+                if ch2 == b'K': return "left"
+                if ch2 == b'M': return "right"
+            if ch == b'\r': return "enter"
+            if ch == b'\x1b': return "escape"
+            if ch == b'\x03': raise KeyboardInterrupt()
+            return ch.decode("utf-8").lower()
+        except Exception:
+            return ""
+    else:
+        import tty
+        import termios
+        import select
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            r, _, _ = select.select([sys.stdin], [], [], 10.0)
+            if not r:
+                return ""
+            ch = sys.stdin.read(1)
+            if ch == '\x03':
+                raise KeyboardInterrupt()
+            if ch == '\x1b':
+                time.sleep(0.05)
+                r, _, _ = select.select([sys.stdin], [], [], 0)
+                if r:
+                    ch2 = sys.stdin.read(1)
+                    if ch2 == '[':
+                        ch3 = sys.stdin.read(1)
+                        if ch3 == 'A': return "up"
+                        if ch3 == 'B': return "down"
+                        if ch3 == 'C': return "right"
+                        if ch3 == 'D': return "left"
+                return "escape"
+            if ch == '\r' or ch == '\n': return "enter"
+            return ch.lower()
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+def choose_option_interactive(title, options, prompt_message="Use Up/Down arrows and press Enter to select:"):
+    idx = 0
+    while True:
+        console.clear()
+        console.print(Panel(Text(f"🐾 {title} 🐾", style="bold green", justify="center"), border_style="green"))
+        
+        for i, opt in enumerate(options):
+            if i == idx:
+                console.print(Text(f"  ▶  {opt}", style="bold #00E676"))
+            else:
+                console.print(Text(f"     {opt}", style="dim"))
+                
+        console.print(f"\n[dim]{prompt_message}[/dim]")
+        
+        key = read_key()
+        if key == "up":
+            idx = (idx - 1) % len(options)
+        elif key == "down":
+            idx = (idx + 1) % len(options)
+        elif key == "enter":
+            return idx
+        elif key == "escape":
+            return -1
+def print_main_menu_interactive(pet, selected_idx):
+    from rich.align import Align
+    
+    face_art = pet.profile_art.get(pet.mood, "(•‿•)")
+    
+    e_color = "#00E676" if pet.energy > 50 else "#FFEB3B" if pet.energy > 20 else "#FF1744"
+    h_color = "#00E676" if pet.happiness > 50 else "#FFEB3B" if pet.happiness > 20 else "#FF1744"
+    hu_color = "#FF1744" if pet.hunger > 60 else "#FFEB3B" if pet.hunger > 30 else "#00E676"
+    
+    dist_p = pet.hub.check_connected("Distance Sensor")
+    tilt_p = pet.hub.check_connected("Tilt Sensor")
+    
+    if dist_p:
+        dist_val = pet.hub.sensor_cache[dist_p]["distance"]
+        dist_str = f"[bold #FF9100]{'█' * int(dist_val)}[/bold #FF9100] [dim]{dist_val} cm[/dim]"
+    else:
+        dist_str = "[#888888]Not Connected[/#888888]"
+        
+    tilt_val = None
+    if tilt_p:
+        tilt_val = pet.hub.sensor_cache[tilt_p]["tilt"]
+        
+    tilt_icons = {
+        "Neutral": "● Neutral",
+        "Left": "◀ Left",
+        "Right": "▶ Right",
+        "Forward": "▲ Forward",
+        "Backward": "▼ Backward",
+        "Unknown": "? Unknown"
+    }
+    tilt_str = f"[bold #FF9100]{tilt_icons.get(tilt_val, tilt_val)}[/bold #FF9100]" if tilt_val else "[#888888]Not Connected[/#888888]"
+    
+    xp_needed = pet.get_xp_needed()
+    xp_pct = min(100, max(0, int((pet.xp / xp_needed) * 100)))
+    ai_status = "[bold #00E676]ON[/bold #00E676]" if pet.ai_autopilot else "[bold #FF1744]OFF[/bold #FF1744]"
+    
+    def make_bar(val, color_hex):
+        filled = min(10, max(0, int(val / 10)))
+        empty = 10 - filled
+        bar = "█" * filled + "░" * empty
+        return f"[bold {color_hex}]{bar}[/bold {color_hex}] [bold]{val}/100[/bold]"
+
+    status_table = Table.grid(padding=(0, 2))
+    status_table.add_column(style="#00BBFF", justify="right")
+    status_table.add_column(style="white")
+    status_table.add_row("Profile: ", f"[bold #9B5DE5]{pet.profile}[/bold #9B5DE5] ({pet.pet_name})")
+    status_table.add_row("Level: ", f"[bold #FFD600]{pet.level}[/bold #FFD600] ({pet.get_level_title()})")
+    status_table.add_row("XP: ", make_bar(xp_pct, "#9B5DE5") + f" [dim]{pet.xp}/{xp_needed} XP[/dim]")
+    status_table.add_row("State/Mood: ", f"[bold #F15BB5]{pet.mood.upper()}[/bold #F15BB5]")
+    status_table.add_row("Energy: ", make_bar(pet.energy, e_color))
+    status_table.add_row("Happiness: ", make_bar(pet.happiness, h_color))
+    status_table.add_row("Hunger: ", make_bar(pet.hunger, hu_color))
+    status_table.add_row("Distance: ", dist_str)
+    status_table.add_row("Tilt: ", tilt_str)
+    status_table.add_row("AI Autopilot: ", ai_status)
+    status_table.add_row("Trainer HP: ", make_bar(pet.trainer_hp, "#FF1744" if pet.trainer_hp < 40 else "#00E676"))
+
+    face_panel = Panel(
+        Align.center(Text(f"\n\n  {face_art}  \n\n", style="bold #FFD600", justify="center")),
+        title="Pet Expression",
+        border_style="#FFD600"
+    )
+    
+    left_layout = Layout()
+    left_layout.split_column(
+        Layout(face_panel, ratio=4),
+        Layout(Panel(status_table, title="Vital Telemetry", border_style="#00E676"), ratio=6)
+    )
+    
+    menu_options = [
+        "Enter Live Dashboard Mode",
+        "Feed Pet",
+        "Pet the Pet",
+        "Poke Pet",
+        "Sing a Custom Melody",
+        "Music Center: Play MIDI Song",
+        "Tuning & Manual Hardware Overrides",
+        f"Change Pet Profile [Current: {pet.profile}]",
+        "Hub Status & Telemetry Summary",
+        "Play Games & Live Tutorial",
+        "Ollama Local LLM Setup Helper",
+        f"Toggle Autopilot Mode [Currently: {'ON' if pet.ai_autopilot else 'OFF'}]",
+        "Chat with Pet (Ollama AI)",
+        "User Training & Manual",
+    ]
+    if "(MOCK)" in pet.hub.hub_name:
+        menu_options.append("Simulate Hub Button Click")
+    menu_options.append("Exit (Disconnect & Close)")
+
+    menu_text = Text()
+    for i, opt in enumerate(menu_options):
+        if i == selected_idx:
+            menu_text.append(f" ▶  {opt}\n", style="bold #00E676")
+        else:
+            menu_text.append(f"     {opt}\n", style="dim")
+            
+    right_panel = Panel(menu_text, title="Action Menu", border_style="green")
+    
+    main_layout = Layout()
+    main_layout.split_row(
+        Layout(left_layout, ratio=4),
+        Layout(right_panel, ratio=5)
+    )
+    
+    console.clear()
+    console.print(Panel(Text("🐾 WeDo 2.0 Desk Pet Dashboard & Controller 🐾", style="bold cyan", justify="center"), border_style="cyan"))
+    console.print(main_layout)
+    console.print("\n[dim]Use Up/Down Arrow keys to navigate options, and press Enter to select.[/dim]")
+
+
+
 # Import rich library components
 try:
     from rich.console import Console
@@ -2001,18 +2183,19 @@ def handle_tuning_menu(pet):
         time.sleep(0.5)
 
 def handle_profile_menu(pet):
-    console.print("\n--- 🐾 Switch Pet Profile ---", style="bold yellow")
-    console.print("1. Puppy (Kepler) - Friendly, mid tones")
-    console.print("2. Kitten (Luna) - Quiet, high meows")
-    console.print("3. Robot (RoboPet) - Retro synthesizer beeps")
-    console.print("4. Penguin (Pingu) - Squawky, waddle waddle!")
-    console.print("5. Cancel")
-    choice = console.input("[yellow]Select choice: [/yellow]").strip()
-    
-    profiles = {"1": "Puppy", "2": "Kitten", "3": "Robot", "4": "Penguin"}
-    if choice in profiles:
-        pet.change_profile(profiles[choice])
+    options = [
+        "Puppy (Kepler) - Friendly, mid tones",
+        "Kitten (Luna) - Quiet, high meows",
+        "Robot (RoboPet) - Retro synthesizer beeps",
+        "Penguin (Pingu) - Squawky, waddle waddle!",
+        "Cancel"
+    ]
+    sel = choose_option_interactive("Switch Pet Profile", options)
+    profiles = {0: "Puppy", 1: "Kitten", 2: "Robot", 3: "Penguin"}
+    if sel in profiles:
+        pet.change_profile(profiles[sel])
     time.sleep(0.5)
+
 
 
 # -----------------------------------------------------------------
@@ -2030,50 +2213,33 @@ def select_or_create_pet():
             console.print("\n[yellow]No saved pets found. Let's create your first companion![/yellow]")
             return create_new_pet_flow()
             
-        table = Table(title="🐾 Choose Your Desk Pet 🐾", border_style="cyan")
-        table.add_column("No.", style="yellow", justify="right")
-        table.add_column("Name", style="white")
-        table.add_column("Profile", style="magenta")
-        table.add_column("Level", style="green")
-        
         pet_states = []
-        for idx, filename in enumerate(sorted(files)):
+        for filename in sorted(files):
             path = os.path.join(dir_path, filename)
             try:
                 with open(path, "r") as f:
                     state = json.load(f)
                     pet_states.append(state)
-                    table.add_row(
-                        str(idx + 1),
-                        state.get("pet_name", "Unknown"),
-                        state.get("profile", "Puppy"),
-                        str(state.get("level", 1))
-                    )
             except Exception:
                 pass
-                
-        console.print(table)
-        console.print("[n] Create a New Pet")
-        console.print("[d] Delete a Pet")
-        console.print("[0] Exit")
+
+        options = []
+        for state in pet_states:
+            options.append(f"{state.get('pet_name', 'Unknown')} ({state.get('profile', 'Puppy')} - Lvl {state.get('level', 1)})")
+        options.append("Create a New Pet")
+        options.append("Delete a Pet")
+        options.append("Exit")
         
-        choice = console.input("\n[bold cyan]Select choice: [/bold cyan]").strip().lower()
-        if choice == "0":
+        sel = choose_option_interactive("Choose Your Desk Pet", options)
+        if sel == -1 or sel == len(options) - 1:
             sys.exit(0)
-        elif choice == "n":
-            return create_new_pet_flow()
-        elif choice == "d":
+        elif sel == len(options) - 2:
             delete_pet_flow(files)
+        elif sel == len(options) - 3:
+            return create_new_pet_flow()
         else:
-            try:
-                num = int(choice)
-                if 1 <= num <= len(pet_states):
-                    return pet_states[num - 1]
-                else:
-                    console.print("[red]Invalid selection.[/red]")
-            except ValueError:
-                console.print("[red]Invalid choice. Enter number, 'n', 'd', or '0'.[/red]")
-            time.sleep(1.0)
+            return pet_states[sel]
+
 
 def create_new_pet_flow():
     console.print("\n=== 🐾 Create a New WeDo 2.0 Desk Pet ===\n", style="bold cyan")
@@ -2196,86 +2362,67 @@ def select_hub_flow(default_hub_name):
                 
         display_devices = wedo_devices + other_devices
         
-        table = Table(title="📡 Select Your LEGO Smarthub 📡", border_style="cyan")
-        table.add_column("No.", style="yellow", justify="right")
-        table.add_column("Name", style="green")
-        table.add_column("MAC Address", style="magenta")
-        table.add_column("RSSI", style="blue")
-        
-        for idx, dev in enumerate(display_devices):
+        options = []
+        for dev in display_devices:
             rssi = getattr(dev, "rssi", "N/A")
             if rssi == "N/A" and hasattr(dev, "metadata") and dev.metadata:
                 rssi = dev.metadata.get("rssi", "N/A")
             rssi_str = f"{rssi} dBm" if rssi != "N/A" else "N/A"
-            table.add_row(str(idx + 1), str(dev.name or "Unknown"), str(dev.address), rssi_str)
+            options.append(f"{dev.name or 'Unknown'} ({dev.address}) [{rssi_str}]")
             
-        console.print(table)
-        console.print("[m] Start in Mock/Simulation Mode (Offline)")
-        console.print("[r] Rescan for Bluetooth Devices")
-        console.print("[0] Exit")
+        options.append("Start in Mock/Simulation Mode (Offline)")
+        options.append("Rescan for Bluetooth Devices")
+        options.append("Exit")
         
-        choice = console.input("\n[bold cyan]Select choice: [/bold cyan]").strip().lower()
-        if choice == "0":
+        sel = choose_option_interactive("Select Your LEGO Smarthub", options)
+        if sel == -1 or sel == len(options) - 1:
             sys.exit(0)
-        elif choice == "r":
+        elif sel == len(options) - 2:
             continue
-        elif choice == "m":
+        elif sel == len(options) - 3:
             return MockWeDo2Hub("Mock Smart Hub"), "Simulated (Mock)"
         else:
+            target_dev = display_devices[sel]
+            target_name = target_dev.name or target_dev.address
+            console.print(f"[cyan]Connecting to Smarthub '{target_name}'...[/cyan]")
             try:
-                num = int(choice)
-                if 1 <= num <= len(display_devices):
-                    target_dev = display_devices[num - 1]
-                    target_name = target_dev.name or target_dev.address
-                    console.print(f"[cyan]Connecting to Smarthub '{target_name}'...[/cyan]")
-                    try:
-                        hub = RealWeDo2Hub(target_name)
-                        console.print("[green]Connected successfully![/green]")
-                        hub.beep(600, 150)
-                        time.sleep(0.1)
-                        hub.beep(850, 200)
-                        hub.set_led("green")
-                        return hub, "Physical (BLE)"
-                    except Exception as e:
-                        console.print(f"[red]Connection failed: {e}[/red]")
-                        console.print("Please verify the hub is powered on and retry.")
-                        time.sleep(2.0)
-                else:
-                    console.print("[red]Invalid selection number.[/red]")
-                    time.sleep(1.0)
-            except ValueError:
-                console.print("[red]Invalid choice. Enter a number, 'm', 'r', or '0'.[/red]")
-                time.sleep(1.0)
+                hub = RealWeDo2Hub(target_name)
+                console.print("[green]Connected successfully![/green]")
+                hub.beep(600, 150)
+                time.sleep(0.1)
+                hub.beep(850, 200)
+                hub.set_led("green")
+                return hub, "Physical (BLE)"
+            except Exception as e:
+                console.print(f"[red]Connection failed: {e}[/red]")
+                console.print("Please verify the hub is powered on and retry.")
+                time.sleep(2.0)
+
+
+
 
 
 # -----------------------------------------------------------------
 # WeDo Games & Interactive Tutorial
 # -----------------------------------------------------------------
 def handle_games_menu(pet):
+    options = [
+        "Interactive Live Tutorial - Walk through sensors and triggers",
+        "Obstacle Course (Stop-Before-Crash) - Autonomous car navigation",
+        "Color Simon Says - Memorize LED color patterns",
+        "Back to Main Menu"
+    ]
     while True:
-        console.clear()
-        table = Table(title="🎮 WeDo 2.0 Pet Arcade & Games Menu 🎮", border_style="bold green")
-        table.add_column("No.", style="yellow", justify="right")
-        table.add_column("Game Mode", style="cyan")
-        table.add_column("Description", style="white")
-        table.add_row("1", "Interactive Live Tutorial", "Step-by-step walk through sensors and triggers")
-        table.add_row("2", "Obstacle Course (Stop-Before-Crash)", "Autonomous navigation game with distance sensor")
-        table.add_row("3", "Color Simon Says", "Memorize LED color patterns and repeat them")
-        table.add_row("0", "Back to Main Menu", "Return to home menu")
-        console.print(table)
-        
-        choice = console.input("\n[bold cyan]Choose game option: [/bold cyan]").strip()
-        if choice == "0":
+        sel = choose_option_interactive("Pet Arcade & Games Menu", options)
+        if sel == -1 or sel == 3:
             break
-        elif choice == "1":
+        elif sel == 0:
             run_interactive_tutorial(pet)
-        elif choice == "2":
+        elif sel == 1:
             run_obstacle_course_game(pet)
-        elif choice == "3":
+        elif sel == 2:
             run_simon_says_game(pet)
-        else:
-            console.print("[red]Invalid selection.[/red]")
-            time.sleep(1.0)
+
 
 def run_interactive_tutorial(pet):
     console.clear()
@@ -2628,10 +2775,47 @@ def main():
 
     # Main Interactive CLI Command Loop
     try:
+        selected_idx = 0
         while pet.is_running:
-            console.clear()
-            print_main_menu(pet)
-            choice = console.input("[bold green]Choose an action (0-9, a, c, b, g, o, t): [/bold green]").strip().lower()
+            menu_len = 16 if "(MOCK)" in hub.hub_name else 15
+            print_main_menu_interactive(pet, selected_idx)
+            
+            key = read_key()
+            if key == "up":
+                selected_idx = (selected_idx - 1) % menu_len
+                continue
+            elif key == "down":
+                selected_idx = (selected_idx + 1) % menu_len
+                continue
+            elif key == "enter":
+                choice_map = {
+                    0: "1",
+                    1: "2",
+                    2: "3",
+                    3: "4",
+                    4: "5",
+                    5: "6",
+                    6: "7",
+                    7: "8",
+                    8: "9",
+                    9: "g",
+                    10: "o",
+                    11: "a",
+                    12: "c",
+                    13: "t"
+                }
+                if "(MOCK)" in hub.hub_name:
+                    choice_map[14] = "b"
+                    choice_map[15] = "0"
+                else:
+                    choice_map[14] = "0"
+                    
+                choice = choice_map.get(selected_idx, "0")
+            elif key == "q" or key == "escape":
+                choice = "0"
+            else:
+                continue
+
 
 
             if choice == "1":
