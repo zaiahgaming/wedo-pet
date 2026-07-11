@@ -800,14 +800,10 @@ class DeskPet:
         self.brain_thread = threading.Thread(target=self._brain_loop, daemon=True)
         self.brain_thread.start()
 
-
-
     def _start_system_tray(self):
         def create_tray_image():
-            # Create a 64x64 icon representing WeDo status
             image = Image.new('RGB', (64, 64), color=(30, 30, 30))
             draw = ImageDraw.Draw(image)
-            # Active status color (green)
             draw.ellipse((8, 8, 56, 56), fill=(0, 230, 118))
             draw.ellipse((22, 22, 42, 42), fill=(255, 255, 255))
             return image
@@ -819,16 +815,45 @@ class DeskPet:
             try:
                 if platform.system() == "Linux":
                     try:
-                        subprocess.Popen(["gnome-terminal", "--", "python3", script_path])
+                        subprocess.Popen(["gnome-terminal", "--", script_path])
                     except Exception:
-                        subprocess.Popen(["xterm", "-e", "python3", script_path])
+                        subprocess.Popen(["xterm", "-e", script_path])
                 elif platform.system() == "Windows":
-                    subprocess.Popen(["cmd.exe", "/c", "start", "python", script_path], shell=True)
+                    subprocess.Popen([script_path], shell=True)
                 elif platform.system() == "Darwin":
-                    cmd = f'tell application "Terminal" to do script "python3 {script_path}"'
+                    cmd = f'tell application "Terminal" to do script "{script_path}"'
                     subprocess.Popen(["osascript", "-e", cmd])
             except Exception as e:
                 self.add_log(f"Error launching terminal: {e}")
+
+        def on_feed(icon, item):
+            self.interact_feed()
+
+        def on_pet(icon, item):
+            self.interact_pet()
+
+        def on_poke(icon, item):
+            self.interact_poke()
+
+        def on_chime(icon, item):
+            def play_chime():
+                try:
+                    scale = [523, 659, 784, 1047]
+                    for freq in scale:
+                        self.hub.beep(freq, 120)
+                        time.sleep(0.08)
+                except Exception:
+                    pass
+            threading.Thread(target=play_chime, daemon=True).start()
+
+        def on_toggle_autopilot(icon, item):
+            self.ai_autopilot = not self.ai_autopilot
+            self.add_log(f"AI Autopilot mode set to {self.ai_autopilot}")
+
+        def on_profile(profile_name):
+            def f(icon, item):
+                self.change_profile(profile_name)
+            return f
 
         def on_exit(icon, item):
             icon.stop()
@@ -840,10 +865,23 @@ class DeskPet:
             os._exit(0)
 
         menu = pystray.Menu(
+            pystray.MenuItem("Feed Pet", on_feed),
+            pystray.MenuItem("Pet Kepler", on_pet),
+            pystray.MenuItem("Poke Kepler", on_poke),
+            pystray.MenuItem("Play Happy Chime", on_chime),
+            pystray.MenuItem("Toggle Autopilot", on_toggle_autopilot, checked=lambda item: self.ai_autopilot),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Change Profile", pystray.Menu(
+                pystray.MenuItem("Puppy (Kepler)", on_profile("Puppy"), checked=lambda item: self.profile == "Puppy"),
+                pystray.MenuItem("Kitten (Luna)", on_profile("Kitten"), checked=lambda item: self.profile == "Kitten"),
+                pystray.MenuItem("Robot (RoboPet)", on_profile("Robot"), checked=lambda item: self.profile == "Robot"),
+                pystray.MenuItem("Penguin (Pingu)", on_profile("Penguin"), checked=lambda item: self.profile == "Penguin")
+            )),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem("Show Telemetry Dashboard", on_show_dashboard),
             pystray.MenuItem("Exit Pet Application", on_exit)
         )
-        
+
         self.tray_icon = pystray.Icon(
             "wedo_pet",
             create_tray_image(),
@@ -2518,6 +2556,27 @@ def select_or_create_pet():
     dir_path = os.path.expanduser("~/.wedo_pets")
     os.makedirs(dir_path, exist_ok=True)
     
+    if not sys.stdin.isatty():
+        files = [f for f in os.listdir(dir_path) if f.endswith(".json")]
+        if not files:
+            return {
+                "pet_name": "Kepler",
+                "profile": "Puppy",
+                "level": 1,
+                "xp": 0,
+                "energy": 80,
+                "happiness": 70,
+                "hunger": 30,
+                "trainer_hp": 100,
+                "ai_autopilot": False
+            }
+        latest_file = max(files, key=lambda f: os.path.getmtime(os.path.join(dir_path, f)))
+        try:
+            with open(os.path.join(dir_path, latest_file), "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+
     while True:
         # Scan for existing JSON files
         files = [f for f in os.listdir(dir_path) if f.endswith(".json")]
@@ -4023,9 +4082,6 @@ def pull_qwen_command():
 # CLI Connection Launcher & Arguments
 # -----------------------------------------------------------------
 def main():
-
-
-
     parser = argparse.ArgumentParser(description="Start the interactive LEGO WeDo 2.0 CLI Desk Pet.")
     parser.add_argument("--hub-name", type=str, default="Isaiah Smart Hub",
                         help="Bluetooth name of your WeDo 2.0 hub (default: Isaiah Smart Hub).")
@@ -4055,12 +4111,14 @@ def main():
         sys.exit(0)
 
 
+    no_tty = not sys.stdin.isatty()
+
     # Resolve Hub Connection
     hub = None
     hub_type = "Physical (BLE)"
     
-    if args.mock:
-        console.print("[yellow]Starting in MOCK / SIMULATION mode as requested.[/yellow]")
+    if args.mock or no_tty:
+        # If no terminal is open, fall back to simulated mock mode by default
         hub = MockWeDo2Hub(args.hub_name)
         hub_type = "Simulated (Mock)"
     else:
@@ -4069,28 +4127,44 @@ def main():
 
     # Select or initialize Pet state
     state_dict = select_or_create_pet()
-    is_new = state_dict.pop("is_new", False)
+    is_new = state_dict.pop("is_new", False) if "is_new" in state_dict else False
     pet = DeskPet(hub, state_dict)
     
-    if is_new:
+    if is_new and not no_tty:
         run_interactive_tutorial(pet)
 
-
-    # Show initial live dashboard
-    try:
-        run_live_dashboard(pet, hub_type)
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Interrupted by user. Exiting cleanly...[/yellow]")
-    finally:
-        pet.is_running = False
-        hub.stop_motor()
+    if no_tty:
         try:
-            hub.set_led("blue")
-            time.sleep(0.2)
-        except Exception:
+            while pet.is_running:
+                time.sleep(1.0)
+        except KeyboardInterrupt:
             pass
-        hub.disconnect()
-        console.print("[green]Goodbye![/green]")
+        finally:
+            pet.is_running = False
+            try:
+                hub.stop_motor()
+            except Exception:
+                pass
+            hub.disconnect()
+    else:
+        # Show initial live dashboard
+        try:
+            run_live_dashboard(pet, hub_type)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Interrupted by user. Exiting cleanly...[/yellow]")
+        finally:
+            pet.is_running = False
+            try:
+                hub.stop_motor()
+            except Exception:
+                pass
+            try:
+                hub.set_led("blue")
+                time.sleep(0.2)
+            except Exception:
+                pass
+            hub.disconnect()
+            console.print("[green]Goodbye![/green]")
 
 if __name__ == "__main__":
     main()
